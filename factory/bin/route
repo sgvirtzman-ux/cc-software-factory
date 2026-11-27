@@ -1,5 +1,13 @@
-#!/usr/bin/env python3
-"""Map intake's risk and surfaces to the job's agent set.
+#!/bin/sh
+''':'
+# Start with the first Python 3.10+ on PATH: python3, or python or py on Windows.
+for p in python3 python py; do
+  "$p" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && exec "$p" "$0" "$@"
+done
+echo "factory: needs Python 3.10 or later on PATH, as python3, python or py" >&2
+exit 1
+'''
+__doc__ = """Map intake's risk and surfaces to the job's agent set.
 
 Usage: route <job-id>
 
@@ -27,7 +35,8 @@ def main(argv):
         die("usage: route <job-id>")
     job_id = argv[0]
     job_bin = str(FACTORY / "bin" / "job")
-    res = subprocess.run([job_bin, "sync", job_id], capture_output=True, text=True)
+    # Through this Python: Windows can't run a script by its #! line.
+    res = subprocess.run([sys.executable, job_bin, "sync", job_id], capture_output=True, text=True)
     if res.returncode != 0:
         die(res.stderr.strip())
     job = json.loads((FACTORY / "jobs" / job_id / "job.json").read_text())
@@ -41,7 +50,7 @@ def main(argv):
             die(f"surface {surface!r} isn't in config.json surface_reviewers ({', '.join(CONFIG['surface_reviewers'])})")
         reviewers.update(extra)
     agents = {"reviewers": reviewers}
-    res = subprocess.run([job_bin, "agents", job_id, json.dumps(agents)], capture_output=True, text=True)
+    res = subprocess.run([sys.executable, job_bin, "agents", job_id, json.dumps(agents)], capture_output=True, text=True)
     if res.returncode != 0:
         die(res.stderr.strip())
     print(f"{job_id}: reviewers " + ", ".join(f"{k} {v}" for k, v in reviewers.items()))

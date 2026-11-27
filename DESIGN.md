@@ -34,7 +34,7 @@ skim a job on the dashboard and read the detail only where it matters.
 ```
 intake (fable)     → ACCEPT (scope possibly changed) | NEEDS-INFO | REJECT, posted as an issue comment
 route (script)     → reviewers + models from risk/surfaces via config.json
-worktree           → factory/<job-id> from origin/main
+worktree           → the job's branch (factory/<job-id> by default) from origin/main
 spec-writer (opus) → spec.md
 builder            → commits and pushes; on GitHub the factory opens the draft PR
 gate (script)      → checks.sh; FAIL → builder gets the log, no reviewers spawned
@@ -106,7 +106,7 @@ intake chooses it, because it already reads the code to judge scope, and a
 a `REPO:` line in `intake.md`, checked against the list before anything is
 created. Worktrees go in the workspace's `.worktrees/<repo>/`, outside the
 repos, so the factory never writes to a repo except through its own
-`factory/*` branches. Each repo's checks script lives in the workspace too, so
+job branches. Each repo's checks script lives in the workspace too, so
 no branch can edit the checks it's judged by. The agents are told their
 worktree, repo and base in every prompt's header, which `job header` prints,
 so they work the same in either layout. One repo per job keeps state, the gate
@@ -200,7 +200,7 @@ break this.
 - Issue text reaches agents as quoted data in `issue.md`, with comments only
   from the issue's author (the reporter, on Jira) and the factory's operator.
   It is never part of a prompt. Intake, which reads it first, has no shell.
-- Agents push only `factory/*` branches. On GitHub only `factory/bin/job
+- Agents push only their job's own branch. On GitHub only `factory/bin/job
   merge` merges, through `gh pr merge`; in git mode the factory never merges.
   The factory never deploys.
 - One PR per issue; at most `max_rounds` build rounds per job before a human

@@ -1,5 +1,13 @@
-#!/usr/bin/env python3
-"""The deterministic gate: does the job's branch pass the repo's checks?
+#!/bin/sh
+''':'
+# Start with the first Python 3.10+ on PATH: python3, or python or py on Windows.
+for p in python3 python py; do
+  "$p" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && exec "$p" "$0" "$@"
+done
+echo "factory: needs Python 3.10 or later on PATH, as python3, python or py" >&2
+exit 1
+'''
+__doc__ = """The deterministic gate: does the job's branch pass the repo's checks?
 
 Usage:
   gate <job-id>            write round-N/checks.md; exit 0 on PASS, 1 on FAIL
@@ -74,8 +82,10 @@ def protected_changes(worktree, repo):
 def run_checks(worktree, repo):
     if not repo.checks.exists():
         die(f"no checks script for {repo.name}: {repo.checks}")
+    # Read it ourselves so Windows CRLF line endings can't break bash.
+    script = repo.checks.read_text().replace("\r\n", "\n")
     start = time.monotonic()
-    res = subprocess.run(["bash", str(repo.checks)], cwd=worktree, capture_output=True, text=True)
+    res = subprocess.run(["bash", "-c", script, str(repo.checks)], cwd=worktree, capture_output=True, text=True)
     return res.returncode, res.stdout + res.stderr, int(time.monotonic() - start)
 
 
