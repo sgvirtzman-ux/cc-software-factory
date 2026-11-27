@@ -120,10 +120,22 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
   ```
 
   `pr_url` is optional: a link to the host's "create pull request" page, with
-  `{branch}` and `{base}` filled in for each job. The example is Azure DevOps;
-  on GitLab it's
+  `{branch}` and `{base}` filled in for each job. Build it from
+  `git remote get-url origin` rather than asking the user. On Azure DevOps the
+  remote holds the organization, project and repo in one of these forms:
+
+  - `https://<org>@dev.azure.com/<org>/<project>/_git/<repo>`
+  - `https://<org>.visualstudio.com/<project>/_git/<repo>` (older; may include
+    `DefaultCollection/` before the project)
+  - `git@ssh.dev.azure.com:v3/<org>/<project>/<repo>`
+
+  and the link is
+  `https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequestcreate?sourceRef={branch}&targetRef={base}`
+  (keep any URL-encoding, such as `%20`, in the project or repo name). On
+  GitLab it's
   `https://<host>/<group>/<repo>/-/merge_requests/new?merge_request[source_branch]={branch}&merge_request[target_branch]={base}`.
-  Leave it out and the hand-off names the branch instead.
+  Show the user the link `factory/bin/job check-tracker` prints and ask them to
+  open it once. Leave `pr_url` out and the hand-off names the branch instead.
 - `protected_paths`: keep the two factory entries and don't add the project's
   tests. Features legitimately change existing tests (a new required field
   changes every fixture), and a protected test blocks the job with no way
@@ -156,7 +168,12 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
 
   The factory makes one move at a time, so each move must be allowed directly
   in the workflow: `ready_status` → `start_status` → `merged_status`, and
-  `start_status` → `ready_status` for rejections. Check
+  `start_status` → `ready_status` for rejections.
+
+  If the Jira project's tickets span several repos, give each repo's install
+  its own queue label, such as `"queue": "factory:<repo>"`, and tell the user
+  to label each ticket for the repo that should build it. With the plain
+  `factory` label, every repo's factory would pick up every ticket. Check
   them in the project's workflow, or with `factory/bin/job check-tracker` and a
   test issue. `ready_status` and `start_status` are optional. Without
   `ready_status` the queue is every labeled issue that isn't Done and isn't in
