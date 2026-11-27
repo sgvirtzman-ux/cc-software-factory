@@ -74,6 +74,7 @@ LABELS = {"handoff": "factory:ready-for-pr", **CONFIG["labels"]}
 
 sys.path.insert(0, str(FACTORY / "lib"))
 import codehost as codehosts  # noqa: E402
+import shell  # noqa: E402
 import tracker as trackers  # noqa: E402
 import workspace  # noqa: E402
 
@@ -877,6 +878,12 @@ def cmd_new_issue(title, body):
 def cmd_check_tracker():
     for line in tracker().check(LABELS["queue"]):
         print(line)
+    bash = shell.find_bash(CONFIG)
+    kernel = shell.describe(bash)
+    if sys.platform.startswith("win") and kernel.startswith("Linux"):
+        raise shell.ShellError(f"checks would run in WSL ({bash} reports {kernel}), without this machine's "
+                               "tools; set CLAUDE_CODE_GIT_BASH_PATH or config.json `bash` to Git's bash.exe")
+    print(f"checks run with: {bash} ({kernel or 'unknown'})")
     for repo in ws().repos.values():
         prefix = f"{repo.name}: " if ws().multi else ""
         if not repo.path.is_dir() or not (repo.path / ".git").exists():
@@ -949,7 +956,7 @@ def main(argv):
             cmd_check_tracker()
         else:
             die(f"bad arguments: {' '.join(argv)}\n\n{__doc__.strip()}")
-    except (Refused, trackers.TrackerError, codehosts.HostError, workspace.WorkspaceError) as e:
+    except (Refused, trackers.TrackerError, codehosts.HostError, workspace.WorkspaceError, shell.ShellError) as e:
         die(str(e))
 
 
