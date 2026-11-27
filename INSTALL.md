@@ -7,7 +7,18 @@ project's root. Don't clone this repository.
 The source is the folder the user pointed you at. On GitHub, read files from
 `https://raw.githubusercontent.com/sgvirtzman-ux/cc-software-factory/main/<path>`.
 
-## 0. Check the project
+## 0. Choose the tracker and check the project
+
+Ask the user where the factory's issues live:
+
+- **GitHub Issues** (the default): the repo's own issues.
+- **Jira Cloud**: a Jira project. Ask for the site URL
+  (`https://<name>.atlassian.net`), the project key, the status a merged PR
+  should move an issue to (for example `QA Ready`), and the issue type for
+  issues the factory files (default `Task`). Jira Data Center isn't supported.
+
+Code always stays on GitHub: branches, PRs and merges go through `gh` either
+way, so everything below about `gh` and the repo applies to both.
 
 Stop and tell the user if any of these fail:
 
@@ -20,6 +31,9 @@ Stop and tell the user if any of these fail:
   library.
 - None of the files in step 1 already exist. If one does, show the user the
   clash and ask before overwriting.
+- For Jira: `JIRA_EMAIL` and `JIRA_API_TOKEN` are set in the environment
+  Claude Code runs in (see **Jira credentials** in step 2). Never ask the user
+  to paste the token into the chat.
 
 Warn the user, but carry on, if this one fails:
 
@@ -47,6 +61,7 @@ factory/checks.sh
 factory/bin/job
 factory/bin/gate
 factory/bin/route
+factory/lib/tracker.py
 factory/dashboard.html
 ```
 
@@ -84,8 +99,44 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
   Add a path only when no job should ever change it. They are fnmatch
   patterns, so `*` also matches `/`.
 - `ports`: move `base` if the project already uses ports 5100–5199.
+- `tracker`: leave `{ "type": "github" }` for GitHub Issues. For Jira, replace
+  it with:
+
+  ```json
+  "tracker": {
+    "type": "jira",
+    "site": "https://<name>.atlassian.net",
+    "project": "<KEY>",
+    "issue_type": "Task",
+    "merged_status": "QA Ready"
+  }
+  ```
+
+  and use hyphens in the labels, which are safest in Jira and in JQL:
+  `"needs_info": "factory-needs-info"`, `"needs_human": "factory-needs-human"`.
+  The queue is every issue in the project labeled `factory` that isn't Done
+  and isn't already in `merged_status`. To change that, add a `queue_jql` with
+  the full query; it replaces the default.
 - Leave `concurrency`, `max_rounds`, `routing`, `surface_reviewers` and
   `prices_usd_per_mtok` as they are unless the user asks.
+
+**Jira credentials** (Jira only). The factory talks to Jira's REST API as the
+account that owns an Atlassian API token. Every comment and label change shows
+up as that account, so suggest a dedicated service account over a person's own.
+The user creates the token at
+<https://id.atlassian.com/manage-profile/security/api-tokens> and puts both
+values in the environment Claude Code runs in, for example in
+`.claude/settings.local.json`:
+
+```json
+{ "env": { "JIRA_EMAIL": "factory-bot@example.com", "JIRA_API_TOKEN": "<token>" } }
+```
+
+Check that `git check-ignore .claude/settings.local.json` prints the path; if it
+doesn't, add `/.claude/settings.local.json` to `.gitignore`. Never put the
+token in `factory/config.json`, `.claude/settings.json`, `AGENTS.md` or any
+other committed file. Claude Code reads the env block when it starts, so
+restart Claude Code after adding it.
 
 **Agents.** The checklists are general on purpose. Tailor them to the stack
 without changing their structure, file names, first-line formats or one-line
@@ -112,7 +163,8 @@ Then add a short section:
 ```markdown
 ## Software factory
 
-`/factory run` builds every open GitHub issue labeled `factory` through
+`/factory run` builds every open issue labeled `factory` (in <GitHub Issues |
+the Jira project KEY>) through
 intake → spec → build → gate → review → approve, one PR per issue. State is in
 `factory/jobs/` (gitignored); `factory/bin/job` is its only writer. Checks:
 `factory/checks.sh`. Dashboard: `cd factory && python3 -m http.server`, then
@@ -137,7 +189,8 @@ copied in step 1 does: the skill in `.claude/skills/factory/`, the agents in
 `.claude/agents/` and the rest of `factory/` are part of the project and get
 committed, so ignore only these two paths, never `.claude/` or `factory/`.
 
-**Labels.** Create them on GitHub:
+**Labels.** On Jira, skip this: Jira creates a label the first time it's used.
+On GitHub, create them:
 
 ```bash
 gh label create factory --color 5319E7 --description "Build this with the software factory"
@@ -150,7 +203,9 @@ gh label create factory:needs-human --color D93F0B --description "The factory ne
 1. In the project root, on the current branch, `bash factory/checks.sh` exits 0.
    If it fails there, the factory can never pass a job: fix the
    script (not the project) or tell the user what's broken.
-2. `factory/bin/job queue` runs without an error.
+2. `factory/bin/job check-tracker` succeeds. On Jira it also confirms the
+   project has a status named `merged_status`. Then `factory/bin/job queue`
+   runs without an error.
 3. Each file in `.claude/agents/` has only these frontmatter keys: `name`,
    `description`, `tools`, `model`, and `hooks` on the builder. Claude Code
    ignores unknown keys without a warning, so a typo silently changes behaviour.
@@ -170,6 +225,11 @@ Then tell the user, in a few lines:
 
 - Label one or two small issues `factory`, then run `/factory run` in Claude
   Code from the project root.
+- On Jira: anyone who can edit an issue can add the `factory` label, so the
+  label only gates as well as the project's Edit Issues permission does. A
+  merged PR moves the issue to `merged_status` with a comment linking the PR;
+  if the workflow doesn't allow that move from the issue's current status, the
+  factory says so on the issue and leaves it where it is.
 - Every job ends as a PR. The approver merges what it approves; the rest wait
   labeled `factory:needs-human`. Approve one by merging it on GitHub, or tell
   the factory what to change with `/factory <anything>`.

@@ -1,7 +1,7 @@
 # Software Factory for Claude Code
 
-A software factory that works through your GitHub issues. Label an issue
-`factory`, run `/factory run`, and agents decide whether it's worth building,
+A software factory that works through your issues, in GitHub Issues or Jira
+Cloud. Label an issue `factory`, run `/factory run`, and agents decide whether it's worth building,
 write a spec, build it, test it with your own checks, review it, and open a
 pull request that closes the issue. The approver merges what it's sure of and
 hands you the rest.
@@ -16,15 +16,16 @@ Install this software factory in this project from the reference repository:
 https://github.com/sgvirtzman-ux/cc-software-factory/tree/main
 ```
 
-Your agent reads [`INSTALL.md`](INSTALL.md), copies the skill, agents, scripts
-and dashboard, fills `factory/checks.sh` with your project's real test, lint,
+Your agent reads [`INSTALL.md`](INSTALL.md), asks whether your issues live in
+GitHub Issues or Jira Cloud, copies the skill, agents, scripts and dashboard, fills `factory/checks.sh` with your project's real test, lint,
 typecheck and build commands, tailors the reviewers to your stack, creates the
-GitHub labels, and checks that `checks.sh` passes on `main`.
+labels, and checks that `checks.sh` passes on `main`.
 
 You need Claude Code 2.1.257 or later, `python3` 3.10 or later, and an
 authenticated [`gh`](https://cli.github.com/) that can push to the repo. If
 your project has pages, the builder and the UX and UI reviewers also need the
-`agent-browser` CLI to look at them.
+`agent-browser` CLI to look at them. For Jira you also need an Atlassian API
+token; the code and PRs stay on GitHub.
 
 ## The loop
 
@@ -39,13 +40,14 @@ route (script)    picks reviewers and models from config.json
         ▼
 spec-writer (opus) → spec.md
         ▼
-builder (opus) → commits, pushes, opens a draft PR "Closes #n"
+builder (opus) → commits, pushes, opens a draft PR linked to the issue
         ▼            ▲
 gate (script) ─FAIL──┤  factory/checks.sh; no reviewer runs on a failing build
         ▼ PASS       │
 reviewers ─CHANGES───┘  code (haiku | sonnet), + ux & ui on UI changes, + security
         ▼ all PASS
 approver (opus) ── APPROVE  → sync with main, gate again, gh pr merge
+                │              (Jira: the issue moves to QA Ready, or your status)
                 └─ ESCALATE → PR ready for you, issue labeled factory:needs-human
 ```
 
@@ -85,6 +87,7 @@ factory/
   bin/job                     the only writer of job.json; refuses illegal moves; merges
   bin/gate                    runs checks.sh in a job's worktree → round-N/checks.md
   bin/route                   risk + surfaces → the job's reviewers and models
+  lib/tracker.py              GitHub Issues or Jira Cloud: the queue, comments, labels
   dashboard.html              the board
 examples/jobs/                finished jobs from a real run
 INSTALL.md                    instructions for the installing agent
@@ -92,6 +95,19 @@ DESIGN.md                     how it works and why
 ```
 
 [`DESIGN.md`](DESIGN.md) explains each decision.
+
+## GitHub Issues or Jira
+
+`tracker` in `factory/config.json` picks where issues live. Either way the code
+lives on GitHub: branches, PRs and merges go through `gh`.
+
+- **GitHub Issues**: a PR says `Closes #12`, so merging it closes the issue.
+- **Jira Cloud**: the factory reads the project's issues labeled `factory`
+  through the REST API with an API token, posts its decisions as comments, and
+  titles each PR with the issue key (`PROJ-12: ...`) so Jira's GitHub
+  integration can link them. Merging a PR comments on the issue with the link
+  and moves it to `merged_status` (for example `QA Ready`) instead of closing
+  it. Issue ids look like `PROJ-12` everywhere: `/factory run PROJ-12`.
 
 ## Dashboard
 
@@ -131,9 +147,10 @@ They come from a test run on a small private calculator repo, with
   `concurrency: 1` and read every PR until you trust it.
 - Intake runs on Fable once per issue. Depending on your plan, Fable can bill
   to usage credits rather than your plan's included usage.
-- Only issues labeled `factory` run, and only people with triage or write
-  access can add labels. Issue text reaches the agents as quoted data, never
-  as their instructions.
+- Only issues labeled `factory` run. On GitHub, only people with triage or
+  write access can add labels. On Jira, anyone who can edit an issue can, so
+  check who has the project's Edit Issues permission before you turn it on.
+  Issue text reaches the agents as quoted data, never as their instructions.
 - The factory pushes only `factory/*` branches, merges only through
   `gh pr merge`, and never deploys.
 
