@@ -349,6 +349,16 @@ def require(cond, msg):
         raise Refused(msg)
 
 
+def tracker_step(job, what, step):
+    """Run a tracker hand-off that mustn't block the job; print a warning if it fails."""
+    try:
+        warning = step(job)
+    except trackers.TrackerError as e:
+        warning = str(e)
+    if warning:
+        print(f"job: warning: {job['id']}: {what}: {warning}", file=sys.stderr)
+
+
 def escalate(job, why):
     """Write decision.md for an escalation the approver didn't make."""
     (job_dir(job["id"]) / "decision.md").write_text(f"ESCALATE\n\n## Why\n{why}\n")
@@ -389,12 +399,8 @@ def advance(job, stage):
         require(job["pr"] and pr_state(job) == "MERGED", "the PR isn't merged")
         if old == "needs-human":
             tracker().remove_labels(job["issue"], [LABELS["needs_human"]])
-        try:  # the merge stands either way; a tracker hiccup is only a warning
-            warning = tracker().on_merged(job)
-        except trackers.TrackerError as e:
-            warning = str(e)
-        if warning:
-            print(f"job: warning: {job['id']}: the issue wasn't updated after the merge: {warning}", file=sys.stderr)
+        # The merge stands either way; a tracker hiccup is only a warning.
+        tracker_step(job, "the issue wasn't updated after the merge", tracker().on_merged)
 
     elif stage == "rejected" and old in WAITING:
         require((d / "rejection.md").exists(), "use `job reject` to reject a waiting job")
@@ -420,6 +426,7 @@ def advance(job, stage):
         elif stage == "rejected":
             tracker().remove_labels(job["issue"], [LABELS["queue"]])
         else:
+            tracker_step(job, "the issue wasn't moved to its in-progress status", tracker().on_started)
             run(["git", "fetch", "origin", BASE])
             Path(job["worktree"]).parent.mkdir(parents=True, exist_ok=True)
             run(["git", "worktree", "add", "-b", job["branch"], job["worktree"], f"origin/{BASE}"])

@@ -109,6 +109,10 @@ class GitHub:
         url = self._gh("issue", "create", "--label", label, "--title", title, "--body", body).strip()
         return int(url.rstrip("/").rsplit("/", 1)[1])
 
+    def on_started(self, job):
+        """GitHub issues have no workflow status to move."""
+        return None
+
     def on_merged(self, job):
         """The PR's `Closes #n` closes the issue; nothing else to do."""
         return None
@@ -147,9 +151,16 @@ class Jira:
         self.project = tracker["project"]
         self.issue_type = tracker.get("issue_type", "Task")
         self.merged_status = tracker["merged_status"]
-        self.queue_jql = tracker.get("queue_jql") or (
-            f'project = "{self.project}" AND labels = "{labels["queue"]}" '
-            f'AND statusCategory != Done AND status != "{self.merged_status}" ORDER BY created ASC')
+        self.ready_status = tracker.get("ready_status")
+        self.start_status = tracker.get("start_status")
+        base = f'project = "{self.project}" AND labels = "{labels["queue"]}"'
+        if self.ready_status:
+            # Issues ready for work, plus the ones the factory already started.
+            statuses = [self.ready_status] + ([self.start_status] if self.start_status else [])
+            where = "status in (" + ", ".join(f'"{x}"' for x in statuses) + ")"
+        else:
+            where = f'statusCategory != Done AND status != "{self.merged_status}"'
+        self.queue_jql = tracker.get("queue_jql") or f"{base} AND {where} ORDER BY created ASC"
         self._me = None
 
     # -- HTTP
@@ -294,6 +305,18 @@ class Jira:
         self._req("POST", self._issue_path(key, "/transitions"), body={"transition": {"id": match[0]["id"]}})
         return None
 
+    def on_started(self, job):
+        """Move the issue to start_status, if one is set, once intake accepts it.
+
+        Returns None on success, or why it couldn't; the job goes on either way.
+        """
+        if not self.start_status:
+            return None
+        try:
+            return self.transition_to(job["issue"], self.start_status)
+        except TrackerError as e:
+            return str(e)
+
     def on_merged(self, job):
         """Comment with the PR and move the issue to merged_status.
 
@@ -318,9 +341,13 @@ class Jira:
         lines = [f"Jira user: {self.me()['name']} ({self.me()['id']})"]
         statuses = self._req("GET", f"/rest/api/3/project/{quote(self.project)}/statuses")
         names = {s["name"].casefold() for t in statuses for s in t.get("statuses", [])}
-        if self.merged_status.casefold() not in names:
-            raise TrackerError(f"project {self.project} has no status named {self.merged_status!r}")
-        lines.append(f"project {self.project} has status {self.merged_status!r}")
+        for setting in ("ready_status", "start_status", "merged_status"):
+            status = getattr(self, setting)
+            if status is None:
+                continue
+            if status.casefold() not in names:
+                raise TrackerError(f"{setting}: project {self.project} has no status named {status!r}")
+            lines.append(f"{setting}: {status!r} exists in {self.project}")
         lines.append(f"queue JQL: {self.queue_jql}")
         lines.append(f"issues in the queue: {len(self.list_queue(label))}")
         return lines

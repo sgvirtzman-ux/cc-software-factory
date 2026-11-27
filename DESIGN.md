@@ -59,9 +59,13 @@ factory needs from a tracker is a handful of calls in `factory/lib/tracker.py`:
 list the queue, read an issue and its comments, comment, add and remove a
 label, file an issue, and hand an issue off after its PR merges. Both adapters
 return issues in one shape, so `factory/bin/job` doesn't know which it's
-using. GitHub Issues closes an issue through the PR's `Closes #n`; Jira gets a
-comment with the PR and a move to `merged_status`, since a merged change
-usually goes to QA rather than straight to Done. Branches, PRs and merges stay
+using. GitHub Issues closes an issue through the PR's `Closes #n`. On Jira
+the factory walks the team's own workflow: it takes issues from
+`ready_status`, moves them to `start_status` when intake accepts, and to
+`merged_status` with a comment linking the PR when the PR merges, since a
+merged change usually goes to QA rather than straight to Done. Each hand-off
+is one direct move, and a move the workflow refuses is a warning, not a
+failure: the job's state lives in `factory/jobs/`, not in Jira's status. Branches, PRs and merges stay
 on GitHub with `gh` either way. The Jira adapter uses the REST API v3 with
 Python's standard library, so there's still nothing to install. Jira's rich
 text is Atlassian Document Format (ADF), so the adapter converts the Markdown

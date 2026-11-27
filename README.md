@@ -102,12 +102,14 @@ DESIGN.md                     how it works and why
 lives on GitHub: branches, PRs and merges go through `gh`.
 
 - **GitHub Issues**: a PR says `Closes #12`, so merging it closes the issue.
-- **Jira Cloud**: the factory reads the project's issues labeled `factory`
-  through the REST API with an API token, posts its decisions as comments, and
-  titles each PR with the issue key (`PROJ-12: ...`) so Jira's GitHub
-  integration can link them. Merging a PR comments on the issue with the link
-  and moves it to `merged_status` (for example `QA Ready`) instead of closing
-  it. Issue ids look like `PROJ-12` everywhere: `/factory run PROJ-12`.
+- **Jira Cloud**: the factory follows your workflow the way your team would.
+  It picks up issues labeled `factory` in your ready status (for example
+  `Sprint Ready`), moves each one to `In Progress` when intake accepts it, and
+  to `QA Ready` when its PR merges, with a comment linking the PR. It reads
+  and writes through the REST API with an API token, posts its decisions as
+  comments, and titles each PR with the issue key (`PROJ-12: ...`) so Jira's
+  GitHub integration can link them. Issue ids look like `PROJ-12` everywhere:
+  `/factory run PROJ-12`.
 
 ## Dashboard
 

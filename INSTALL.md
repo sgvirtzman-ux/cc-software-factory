@@ -13,9 +13,12 @@ Ask the user where the factory's issues live:
 
 - **GitHub Issues** (the default): the repo's own issues.
 - **Jira Cloud**: a Jira project. Ask for the site URL
-  (`https://<name>.atlassian.net`), the project key, the status a merged PR
-  should move an issue to (for example `QA Ready`), and the issue type for
-  issues the factory files (default `Task`). Jira Data Center isn't supported.
+  (`https://<name>.atlassian.net`), the project key, the issue type for issues
+  the factory files (default `Task`), and three statuses from the team's
+  workflow: where a ticket waits when it's ready for work (for example
+  `Sprint Ready`), what the team moves it to when work starts (`In Progress`),
+  and what it moves to when the work is done (`QA Ready`). Jira Data Center
+  isn't supported.
 
 Code always stays on GitHub: branches, PRs and merges go through `gh` either
 way, so everything below about `gh` and the repo applies to both.
@@ -108,15 +111,28 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
     "site": "https://<name>.atlassian.net",
     "project": "<KEY>",
     "issue_type": "Task",
+    "ready_status": "Sprint Ready",
+    "start_status": "In Progress",
     "merged_status": "QA Ready"
   }
   ```
 
-  and use hyphens in the labels, which are safest in Jira and in JQL:
-  `"needs_info": "factory-needs-info"`, `"needs_human": "factory-needs-human"`.
-  The queue is every issue in the project labeled `factory` that isn't Done
-  and isn't already in `merged_status`. To change that, add a `queue_jql` with
-  the full query; it replaces the default.
+  - The queue is the project's issues labeled `factory` whose status is
+    `ready_status` or `start_status`.
+  - When intake accepts an issue, the factory moves it to `start_status`.
+  - When its PR merges, the factory moves it to `merged_status` and comments
+    with the PR link.
+
+  The factory makes one move at a time, so each move must be allowed directly
+  in the workflow: `ready_status` → `start_status` → `merged_status`. Check
+  them in the project's workflow, or with `factory/bin/job check-tracker` and a
+  test issue. `ready_status` and `start_status` are optional. Without
+  `ready_status` the queue is every labeled issue that isn't Done and isn't in
+  `merged_status`. Without `start_status` the issue stays put until the merge.
+  For any other queue, set `queue_jql` to the full query; it replaces the
+  default, and it must still match issues in `start_status`, or the factory
+  loses track of its own jobs. Keep the default labels: Jira accepts the colons
+  in `factory:needs-info`.
 - Leave `concurrency`, `max_rounds`, `routing`, `surface_reviewers` and
   `prices_usd_per_mtok` as they are unless the user asks.
 
@@ -225,11 +241,12 @@ Then tell the user, in a few lines:
 
 - Label one or two small issues `factory`, then run `/factory run` in Claude
   Code from the project root.
-- On Jira: anyone who can edit an issue can add the `factory` label, so the
-  label only gates as well as the project's Edit Issues permission does. A
-  merged PR moves the issue to `merged_status` with a comment linking the PR;
-  if the workflow doesn't allow that move from the issue's current status, the
-  factory says so on the issue and leaves it where it is.
+- On Jira: label a ticket `factory` once it's in `ready_status`. The factory
+  moves it to `start_status` when it starts and to `merged_status` when the PR
+  merges, with a comment linking the PR. If the workflow refuses a move, the
+  factory warns and leaves the ticket where it is. Anyone who can edit an issue
+  can add the label, so the label only gates as well as the project's Edit
+  Issues permission does.
 - Every job ends as a PR. The approver merges what it approves; the rest wait
   labeled `factory:needs-human`. Approve one by merging it on GitHub, or tell
   the factory what to change with `/factory <anything>`.

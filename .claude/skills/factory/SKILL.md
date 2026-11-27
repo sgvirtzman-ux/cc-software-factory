@@ -107,7 +107,9 @@ short line per transition, e.g. `004-dark-mode #12: gate PASS → reviewing (cod
 decision:
 
 - `ACCEPT`: run `factory/bin/route <id>`, then `factory/bin/job advance <id> spec`
-  (it comments on the issue and creates the worktree). Go to **spec**.
+  (it comments on the issue, moves a Jira issue to its in-progress status, and
+  creates the worktree). Go to **spec**. If it prints a warning, pass it on to
+  the user and carry on.
 - `NEEDS-INFO`: `factory/bin/job advance <id> needs-info`. The job parks until
   the author replies.
 - `REJECT`: `factory/bin/job advance <id> rejected`.
