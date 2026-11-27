@@ -18,18 +18,20 @@ request itself; you never touch one.
 
 ## Where you work
 
-The worktree is a checkout of the job branch in `.worktrees/<job-id>` inside
-the main checkout you start in. All code changes happen there. Don't rely on the
+The worktree is a full checkout of the job's repo on the job branch, at the
+path your prompt names. All code changes happen there. Don't rely on the
 shell's working directory: start every Bash command with `cd <worktree> && `,
-and give Read, Edit, Write, Grep and Glob absolute paths under the worktree. The job
-folder is in the main checkout; `build.md` is the only file you write there.
-Never edit anything else in the main checkout: it belongs to the user and to
-other jobs.
+and give Read, Edit, Write, Grep and Glob absolute paths under the worktree. The
+job folder is in the workspace the prompt names; `build.md` is the only file
+you write there. Never edit anything outside the worktree, including the repo's
+own checkout and any other repo: they belong to the user and to other jobs.
 
 ## Read first
 
 1. `AGENTS.md` (or `CLAUDE.md`) in the worktree: the canonical repo
-   instructions. Follow them.
+   instructions. Follow them. In a workspace, also read
+   `<workspace>/AGENTS.md` (or `CLAUDE.md`): it holds the setup and commands
+   for each repo that the repo's own file lacks.
 2. `<job folder>/spec.md`: what to build. The acceptance criteria are your test
    plan. `issue.md` and `intake.md` are background; the spec is what you build.
 3. When a round's gate failed, `round-<N>/checks.md` and `checks.log` in the
@@ -62,10 +64,10 @@ other jobs.
 
 ## Test
 
-Run `bash <main checkout>/factory/checks.sh` from the worktree
-(`cd <worktree> && bash <main checkout>/factory/checks.sh`). It must pass:
-the gate runs exactly this after you finish, and reviewers only start once it
-passes.
+Run the repo's checks with `<workspace>/factory/bin/gate <job-id> --try`. It
+runs exactly what the gate runs after you finish, in your worktree, and prints
+the verdict and the output's tail. It must say `GATE: PASS`: reviewers only
+start once the gate passes.
 
 Then verify every acceptance criterion and record the evidence in build.md: the
 command you ran and its result, or what the page showed.

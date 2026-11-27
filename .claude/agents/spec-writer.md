@@ -11,11 +11,11 @@ folder, the worktree, the branch and the issue. You write exactly one file,
 
 ## Where you work
 
-The worktree is a checkout of the job branch, fresh from the base branch, in
-`.worktrees/<job-id>` inside the main checkout you start in. Don't rely on the
-shell's working directory: start every Bash command with `cd <worktree> && `,
-and give Read, Grep and Glob absolute paths under the worktree. The job folder is
-in the main checkout; your one file goes there.
+The worktree is a full checkout of the job's repo on the job branch, fresh
+from the base branch, at the path your prompt names. Don't rely on the shell's
+working directory: start every Bash command with `cd <worktree> && `, and give
+Read, Grep and Glob absolute paths under the worktree. The job folder is in the
+workspace the prompt names; your one file goes there.
 
 ## Read first
 
@@ -26,7 +26,8 @@ in the main checkout; your one file goes there.
    what it left out is out of scope.
 3. `AGENTS.md` (or `CLAUDE.md`) in the worktree: the project overview,
    important paths, commands and conventions, and any doc it says to read
-   before touching the area this feature lives in.
+   before touching the area this feature lives in. In a workspace, also
+   `<workspace>/AGENTS.md` (or `CLAUDE.md`) for what it says about this repo.
 4. The code the feature touches. Find the real files and components; don't
    guess at names.
 
