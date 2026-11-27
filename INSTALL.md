@@ -53,6 +53,12 @@ Stop and tell the user if any of these fail:
   usually has only the last two). The scripts use only the standard library
   and find whichever works themselves, so don't add a `python3` alias or shim.
 - On Windows: Claude Code runs commands in Git Bash, and so does the factory.
+  The gate finds Git Bash itself (from `CLAUDE_CODE_GIT_BASH_PATH`, Git's
+  install folder, or PATH), never `C:\Windows\System32\bash.exe`, which is
+  WSL's and runs checks in a Linux VM without the machine's tools. If
+  `factory/bin/job check-tracker` says it can't find Git Bash, or that checks
+  would run in WSL, set `"bash"` in `factory/config.json` to the full path of
+  Git's `bash.exe` (usually `C:/Program Files/Git/bin/bash.exe`).
   `git config --global core.longpaths` should print `true`. Worktrees nest
   deep (`.worktrees/<repo>/<job-id>/...`), and Windows' 260-character path
   limit otherwise makes `git worktree add` fail with "Filename too long". If
@@ -93,6 +99,7 @@ factory/bin/dashboard
 factory/lib/tracker.py
 factory/lib/codehost.py
 factory/lib/workspace.py
+factory/lib/shell.py
 factory/dashboard.html
 ```
 
@@ -313,8 +320,10 @@ The last one is only used in git mode.
 2. `factory/bin/job check-tracker` succeeds. It checks the tracker (on Jira,
    that the configured statuses exist) and the code host (on GitHub, the repo;
    in git mode, that `origin` has the base branch, and the `pr_url` link it
-   would post). Then `factory/bin/job queue` runs without an error. On
-   Windows this also proves the scripts start without a `python3` on PATH.
+   would post), and prints which bash runs the checks (on Windows it must be
+   Git Bash: `MINGW64...`, not `Linux`). Then `factory/bin/job queue` runs
+   without an error. On Windows this also proves the scripts start without a
+   `python3` on PATH.
 3. Each file in `.claude/agents/` has only these frontmatter keys: `name`,
    `description`, `tools`, `model`, and `hooks` on the builder. Claude Code
    ignores unknown keys without a warning, so a typo silently changes behaviour.

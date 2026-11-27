@@ -99,6 +99,7 @@ factory/
   lib/tracker.py              GitHub Issues or Jira Cloud: the queue, comments, labels
   lib/codehost.py             GitHub PRs or plain git: how a job's change reaches main
   lib/workspace.py            one repo, or a workspace of several: where each job builds
+  lib/shell.py                which bash runs the checks (Git Bash on Windows, never WSL)
   dashboard.html              the board
 examples/jobs/                finished jobs from a real run
 INSTALL.md                    instructions for the installing agent

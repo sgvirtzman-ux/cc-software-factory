@@ -36,6 +36,7 @@ CONFIG = json.loads((FACTORY / "config.json").read_text())
 TAIL = 80
 
 sys.path.insert(0, str(FACTORY / "lib"))
+import shell  # noqa: E402
 import workspace  # noqa: E402
 
 
@@ -85,7 +86,11 @@ def run_checks(worktree, repo):
     # Read it ourselves so Windows CRLF line endings can't break bash.
     script = repo.checks.read_text().replace("\r\n", "\n")
     start = time.monotonic()
-    res = subprocess.run(["bash", "-c", script, str(repo.checks)], cwd=worktree, capture_output=True, text=True)
+    try:
+        bash = shell.find_bash(CONFIG)  # Git Bash on Windows, never WSL's System32 bash
+    except shell.ShellError as e:
+        die(str(e))
+    res = subprocess.run([bash, "-c", script, str(repo.checks)], cwd=worktree, capture_output=True, text=True)
     return res.returncode, res.stdout + res.stderr, int(time.monotonic() - start)
 
 

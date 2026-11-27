@@ -66,6 +66,7 @@ through the scripts. `factory/jobs/` is runtime state.
 <root>/factory/lib/tracker.py                  the issue tracker: GitHub Issues or Jira
 <root>/factory/lib/codehost.py                 the code host: GitHub PRs or plain git
 <root>/factory/lib/workspace.py                one repo, or a workspace of several
+<root>/factory/lib/shell.py                    which bash runs the checks (Git Bash on Windows)
 <root>/factory/jobs/<job-id>/job.json          the job's state; the dashboard reads it
 <root>/factory/jobs/<job-id>/issue.md          the issue, quoted as data
 <root>/factory/jobs/<job-id>/intake.md         intake's decision, scope, risk, surfaces
