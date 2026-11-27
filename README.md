@@ -1,5 +1,7 @@
 # Software Factory for Claude Code
 
+This factory implementation is based on zazencodes' V2 factory at https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2.
+
 A software factory that works through your issues, in GitHub Issues or Jira
 Cloud, on code hosted anywhere git runs. Label an issue `factory`, run
 `/factory run`, and agents decide whether it's worth building, write a spec,
