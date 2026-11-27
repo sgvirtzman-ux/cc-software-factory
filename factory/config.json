@@ -4,10 +4,12 @@
   "base_branch": "main",
   "merge_method": "merge",
   "tracker": { "type": "github" },
+  "codehost": { "type": "github" },
   "labels": {
     "queue": "factory",
     "needs_info": "factory:needs-info",
-    "needs_human": "factory:needs-human"
+    "needs_human": "factory:needs-human",
+    "handoff": "factory:ready-for-pr"
   },
   "routing": {
     "low":    { "code": "haiku" },

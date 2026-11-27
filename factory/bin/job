@@ -3,24 +3,28 @@
 
 Every stage change goes through `advance`, which checks the files that justify
 it and refuses anything else. Side effects that belong to a transition (issue
-labels and comments in the tracker, the worktree, the PR and the merge on
-GitHub) happen here too, so the orchestrator never improvises them. The issue
-tracker is GitHub Issues or Jira Cloud (config.json `tracker`; see
-factory/lib/tracker.py); code and PRs are always on GitHub.
+labels and comments in the tracker, the worktree, the PR and the merge) happen
+here too, so the orchestrator never improvises them. The issue tracker is
+GitHub Issues or Jira Cloud (config.json `tracker`, factory/lib/tracker.py).
+The code host is GitHub with pull requests, or plain git, where the factory
+pushes the branch and the team opens and merges the PR (config.json
+`codehost`, factory/lib/codehost.py).
 
 Usage:
   job queue                      what /factory run should do with each labeled issue
   job create <issue>             new job for an open `factory` issue; prints the job id
   job advance <job> <stage>      move a job to <stage>, or refuse
-  job merge <job>                APPROVE → sync with the base branch, gate, merge the PR
-  job feedback <job>             needs-human → build, with your feedback (stdin) as feedback-<k>.md
-  job reject <job>               needs-info or needs-human → rejected, with your reason (stdin) as rejection.md
+  job merge <job>                APPROVE → sync with the base branch, gate, then merge the PR
+                                 (github) or push the branch and hand it to the team (git)
+  job merged <job>               mark a handed-off job merged by hand (a squash merge git can't see)
+  job feedback <job>             needs-human or handoff → build, with your feedback (stdin) as feedback-<k>.md
+  job reject <job>               needs-info, needs-human or handoff → rejected, with your reason (stdin)
   job agents <job> <json>        record the routed agent set (called by factory/bin/route)
   job sync <job>                 refresh reviews, gate and cost from the job's files
   job summary [<job>...]         table of jobs: issue, stage, PR, cost, time
   job comment <job>              post your words (stdin) on the job's issue as the operator
   job new-issue <title>          file a `factory` issue with the body on stdin; prints its id
-  job check-tracker              check the tracker's auth and settings
+  job check-tracker              check the tracker's and the code host's settings
 
 <job> is a job id (004-dark-mode) or an issue id: 12 on GitHub, PROJ-12 on Jira.
 """
@@ -39,10 +43,11 @@ FACTORY = REPO / "factory"
 JOBS = FACTORY / "jobs"
 BIN = FACTORY / "bin"
 CONFIG = json.loads((FACTORY / "config.json").read_text())
-LABELS = CONFIG["labels"]
+LABELS = {"handoff": "factory:ready-for-pr", **CONFIG["labels"]}
 BASE = CONFIG["base_branch"]
 
 sys.path.insert(0, str(FACTORY / "lib"))
+import codehost as codehosts  # noqa: E402
 import tracker as trackers  # noqa: E402
 
 TRANSITIONS = {
@@ -53,13 +58,15 @@ TRANSITIONS = {
     "gate": {"review", "build", "needs-human"},
     "review": {"approve", "build", "needs-human"},
     "approve": {"merging", "needs-human"},
-    "merging": {"needs-human"},
+    "merging": {"needs-human", "handoff"},
     "needs-human": {"build", "rejected"},
+    "handoff": {"build", "rejected"},
 }
 TERMINAL = {"merged", "rejected"}
-# Any unfinished job can move to merged once its PR is merged on GitHub,
-# whether the factory merged it or a person did mid-round.
-WAITING = {"needs-info", "needs-human"}
+# Any unfinished job can move to merged once its work is merged, whether the
+# factory merged it, the team merged a handed-off branch, or a person merged
+# it mid-round.
+WAITING = {"needs-info", "needs-human", "handoff"}
 CONCURRENCY = CONFIG["concurrency"]
 
 
@@ -83,14 +90,6 @@ def run(cmd, cwd=REPO, check=True):
     return res
 
 
-def gh(*args):
-    return run(["gh", *args]).stdout
-
-
-def gh_json(*args):
-    return json.loads(gh(*args))
-
-
 _tracker = None
 
 
@@ -100,6 +99,22 @@ def tracker():
     if _tracker is None:
         _tracker = trackers.load(CONFIG, REPO)
     return _tracker
+
+
+_host = None
+
+
+def host():
+    """The code host named in config.json, loaded on first use."""
+    global _host
+    if _host is None:
+        _host = codehosts.load(CONFIG, REPO)
+    return _host
+
+
+def waiting_label(stage):
+    return {"needs-info": LABELS["needs_info"], "needs-human": LABELS["needs_human"],
+            "handoff": LABELS["handoff"]}.get(stage)
 
 
 def operator():
@@ -331,7 +346,7 @@ def sync(job):
         rd = round_dir(job)
         gate = header(rd / "checks.md").get("GATE") if (rd / "checks.md").exists() else None
         job["gate"] = gate
-        if job["agents"] and job["stage"] in {"review", "approve", "merging", "merged", "needs-human"}:
+        if job["agents"] and job["stage"] in {"review", "approve", "merging", "merged", "needs-human", "handoff"}:
             job["reviews"] = {}
             for r in reviewers(job):
                 line = first_line(rd / f"review-{r}.md")
@@ -368,8 +383,14 @@ def git(job, *args, check=True):
     return run(["git", *args], cwd=job["worktree"], check=check)
 
 
-def pr_state(job):
-    return gh_json("pr", "view", str(job["pr"]), "--json", "state")["state"]
+def spec_title(job):
+    spec = job_dir(job["id"]) / "spec.md"
+    line = first_line(spec) if spec.exists() else None
+    return line[2:].strip() if line and line.startswith("# ") else job["title"]
+
+
+def decision_body(job):
+    return (job_dir(job["id"]) / "decision.md").read_text().split("\n", 1)[1].strip()
 
 
 def check_reviews_done(job):
@@ -387,7 +408,7 @@ def next_round(job):
     job["reviews"] = {}
 
 
-def advance(job, stage):
+def advance(job, stage, force=False):
     old = job["stage"]
     require(stage in TRANSITIONS.get(old, set()) or (stage == "merged" and old not in TERMINAL),
             f"{job['id']}: {old} → {stage} is not a legal transition")
@@ -396,21 +417,23 @@ def advance(job, stage):
     intake_body = lambda: "\n".join((d / "intake.md").read_text().split("\n\n", 1)[1:]).strip()
 
     if stage == "merged":
-        require(job["pr"] and pr_state(job) == "MERGED", "the PR isn't merged")
-        if old == "needs-human":
-            tracker().remove_labels(job["issue"], [LABELS["needs_human"]])
+        require(force or host().is_merged(job),
+                "the PR isn't merged" if host().kind == "github" else
+                f"{job['branch']} isn't on origin/{BASE} yet (for a squash merge, use `job merged`)")
+        if old in {"needs-human", "handoff"}:
+            tracker().remove_labels(job["issue"], [waiting_label(old)])
+        how = host().merged_how(job) if (job["pr"] or host().kind == "git") else "Marked merged by hand."
         # The merge stands either way; a tracker hiccup is only a warning.
-        tracker_step(job, "the issue wasn't updated after the merge", tracker().on_merged)
+        tracker_step(job, "the issue wasn't updated after the merge", lambda j: tracker().on_merged(j, how))
+        if host().kind == "git":
+            run(["git", "push", "origin", "--delete", job["branch"]], check=False)
 
     elif stage == "rejected" and old in WAITING:
         require((d / "rejection.md").exists(), "use `job reject` to reject a waiting job")
         reason = (d / "rejection.md").read_text().split("\n", 1)[1].strip()
         tracker().comment(job["issue"], f"### Factory: rejected\n\n{reason}")
-        waiting = LABELS["needs_info"] if old == "needs-info" else LABELS["needs_human"]
-        tracker().remove_labels(job["issue"], [LABELS["queue"], waiting])
-        if job["pr"]:
-            gh("pr", "close", str(job["pr"]))
-            run(["git", "push", "origin", "--delete", job["branch"]], check=False)
+        tracker().remove_labels(job["issue"], [LABELS["queue"], waiting_label(old)])
+        host().discard(job)
         tracker_step(job, "the issue wasn't moved back to its ready status", tracker().on_rejected)
 
     elif old == "intake":
@@ -455,10 +478,12 @@ def advance(job, stage):
         res = git(job, "rev-parse", f"origin/{job['branch']}", check=False)
         remote = res.stdout.strip() if res.returncode == 0 else ""
         require(head == remote, f"{job['branch']} isn't pushed: local {head[:7]}, origin {remote[:7] or 'missing'}")
-        if not job["pr"]:
-            prs = gh_json("pr", "list", "--head", job["branch"], "--state", "open", "--json", "number,url")
-            require(len(prs) == 1, f"expected one open PR from {job['branch']}, found {len(prs)}")
-            job["pr"], job["pr_url"] = prs[0]["number"], prs[0]["url"]
+        job["pushed_head"] = head
+        if not job["pr"]:  # GitHub: the first build opens the draft PR; git: no PR
+            prefix = job.get("pr_title_prefix", "")
+            link = job.get("pr_link_line") or f"Closes #{job['issue']}"
+            summary = section(d / "build.md", "Summary") or ""
+            job["pr"], job["pr_url"] = host().ensure_pr(job, f"{prefix}{spec_title(job)}", f"{link}\n\n{summary}".strip())
 
     elif old == "build":  # → needs-human
         status = first_line(d / "build.md")
@@ -506,22 +531,43 @@ def advance(job, stage):
         line = first_line(d / "decision.md")
         require(line == want, f"decision.md starts with {line!r}, not {want}")
 
-    elif old == "needs-human":
+    elif old == "merging":  # → handoff (git): the branch is pushed, synced and gated
+        require(host().kind == "git", "only git mode hands a branch over")
+        link = host().create_pr_link(job)
+        lines = [
+            "### Factory: ready for a pull request",
+            "",
+            f"The change passed the factory's checks and reviews. It's on branch `{job['branch']}`, "
+            f"up to date with `{BASE}`.",
+            "",
+        ]
+        if link:
+            lines.append(f"- [Create the pull request]({link})")
+        lines += [
+            f"- Suggested title: {job.get('pr_title_prefix', '')}{spec_title(job)}",
+            f"- Once it's merged into `{BASE}`, the factory finishes the job{tracker().merge_followup()}.",
+            "- To change it first, tell the factory with `/factory`.",
+            "",
+            decision_body(job),
+        ]
+        tracker().comment(job["issue"], "\n".join(lines))
+        tracker().add_label(job["issue"], LABELS["handoff"])
+
+    elif old in {"needs-human", "handoff"}:  # → build, with feedback
         feedback = sorted(d.glob("feedback-*.md"))
         require(feedback and feedback[-1].stat().st_mtime > (d / "decision.md").stat().st_mtime,
                 "use `job feedback` to send a job back to the builder")
         job["round_limit"] = job["round"] + CONFIG["max_rounds"]
         next_round(job)
-        tracker().remove_labels(job["issue"], [LABELS["needs_human"]])
+        tracker().remove_labels(job["issue"], [waiting_label(old)])
 
     if stage == "needs-human":
-        body = f"### Factory: needs a human\n\n{(d / 'decision.md').read_text().split(chr(10), 1)[1].strip()}"
-        if job["pr"]:
-            if gh_json("pr", "view", str(job["pr"]), "--json", "isDraft")["isDraft"]:
-                gh("pr", "ready", str(job["pr"]))
-            gh("pr", "comment", str(job["pr"]), "--body", f"{trackers.MARKER}\n{body}")
+        body = f"### Factory: needs a human\n\n{decision_body(job)}"
+        if host().escalate(job, body):
             tracker().notify_escalation(job)
         else:
+            if job.get("pushed_head") and host().kind == "git":
+                body += f"\n\nThe work so far is on branch `{job['branch']}`."
             tracker().comment(job["issue"], body)
         tracker().add_label(job["issue"], LABELS["needs_human"])
 
@@ -582,9 +628,10 @@ def cmd_queue():
     """Rows in the order to start them. `resume` and `new` rows fit in the
     concurrency slots; the rest show as `hold` until a running job finishes."""
     jobs = {j["issue"]: j for j in all_jobs()}
-    # A job is done once its PR is merged on GitHub, which also closes the issue.
+    # A job is done once its work is merged: its PR on GitHub, or its branch on
+    # the base branch in git mode.
     for j in jobs.values():
-        if j["stage"] not in TERMINAL and j["pr"] and pr_state(j) == "MERGED":
+        if j["stage"] not in TERMINAL and host().is_merged(j):
             save(advance(sync(j), "merged"))
     issues = tracker().list_queue(LABELS["queue"])
     open_numbers = {i["id"] for i in issues}
@@ -602,6 +649,9 @@ def cmd_queue():
         elif j["stage"] == "needs-human":
             other_rows.append(("wait", n, j["id"], j["stage"], f"merge PR #{j['pr']}, or give feedback"
                                if j["pr"] else "give feedback"))
+        elif j["stage"] == "handoff":
+            other_rows.append(("wait", n, j["id"], j["stage"],
+                               f"open a PR from {j['branch']} and merge it, or give feedback"))
         elif j["stage"] == "rejected":
             other_rows.append(("skip", n, j["id"], j["stage"], f"rejected; delete factory/jobs/{j['id']} to retry"))
         elif j["stage"] == "merged":
@@ -630,9 +680,9 @@ def cmd_merge(job):
         save(advance(job, "merging"))
     if job["stage"] != "merging":
         die(f"{job['id']} is in {job['stage']}, not approve or merging")
-    if job["pr"] and pr_state(job) == "MERGED":
+    if host().is_merged(job):
         save(advance(sync(job), "merged"))
-        print(f"{job['id']}: merged PR #{job['pr']}")
+        print(f"{job['id']}: merged")
         return
 
     def fail(why):
@@ -651,10 +701,13 @@ def cmd_merge(job):
                     f"See round-{job['round']}/merge-checks.md.\n\n{gate.stdout.strip()}")
     try:
         git(job, "push", "origin", job["branch"])
-        if gh_json("pr", "view", str(job["pr"]), "--json", "isDraft")["isDraft"]:
-            gh("pr", "ready", str(job["pr"]))
-        gh("pr", "merge", str(job["pr"]), f"--{CONFIG['merge_method']}")
-    except Refused as e:
+        job["pushed_head"] = git(job, "rev-parse", "HEAD").stdout.strip()
+        if host().kind == "git":
+            save(advance(sync(job), "handoff"))
+            print(f"{job['id']}: handoff: {job['branch']} is ready for a PR into {BASE}")
+            return
+        host().merge(job)
+    except (Refused, codehosts.HostError) as e:
         return fail(f"The merge failed:\n\n```\n{e}\n```")
     # GitHub may already have deleted the branch on merge.
     run(["git", "push", "origin", "--delete", job["branch"]], check=False)
@@ -662,21 +715,29 @@ def cmd_merge(job):
     print(f"{job['id']}: merged PR #{job['pr']}")
 
 
+def cmd_mark_merged(job):
+    if job["stage"] in TERMINAL:
+        die(f"{job['id']} is already {job['stage']}")
+    save(advance(sync(job), "merged", force=True))
+    print(f"{job['id']}: merged (marked by hand)")
+
+
 def cmd_feedback(job, text):
-    if job["stage"] != "needs-human":
-        die(f"{job['id']} is in {job['stage']}, not needs-human")
+    if job["stage"] not in {"needs-human", "handoff"}:
+        die(f"{job['id']} is in {job['stage']}, not needs-human or handoff")
     if not text.strip():
         die("no feedback on stdin")
     d = job_dir(job["id"])
     k = len(list(d.glob("feedback-*.md"))) + 1
-    (d / f"feedback-{k}.md").write_text(f"# Feedback {k}\n\nFrom @{operator()['name']} after the job escalated.\n\n{text.strip()}\n")
+    when = "after the job escalated" if job["stage"] == "needs-human" else "after the branch was handed off"
+    (d / f"feedback-{k}.md").write_text(f"# Feedback {k}\n\nFrom @{operator()['name']} {when}.\n\n{text.strip()}\n")
     save(advance(sync(job), "build"))
     print(f"{job['id']}: feedback-{k}.md, round {job['round']}")
 
 
 def cmd_reject(job, text):
     if job["stage"] not in WAITING:
-        die(f"{job['id']} is in {job['stage']}, not needs-info or needs-human")
+        die(f"{job['id']} is in {job['stage']}, not needs-info, needs-human or handoff")
     if not text.strip():
         die("no reason on stdin")
     (job_dir(job["id"]) / "rejection.md").write_text(f"REJECTED\n\nBy @{operator()['name']} while the job was {job['stage']}.\n\n{text.strip()}\n")
@@ -705,7 +766,7 @@ def cmd_new_issue(title, body):
 
 
 def cmd_check_tracker():
-    for line in tracker().check(LABELS["queue"]):
+    for line in tracker().check(LABELS["queue"]) + host().check():
         print(line)
 
 
@@ -745,6 +806,8 @@ def main(argv):
             print(f"{job['id']}: {job['stage']} (round {job['round']})")
         elif cmd == "merge" and len(args) == 1:
             cmd_merge(resolve(args[0]))
+        elif cmd == "merged" and len(args) == 1:
+            cmd_mark_merged(resolve(args[0]))
         elif cmd == "feedback" and len(args) == 1:
             cmd_feedback(resolve(args[0]), sys.stdin.read())
         elif cmd == "reject" and len(args) == 1:
@@ -766,7 +829,7 @@ def main(argv):
             cmd_check_tracker()
         else:
             die(f"bad arguments: {' '.join(argv)}\n\n{__doc__.strip()}")
-    except (Refused, trackers.TrackerError) as e:
+    except (Refused, trackers.TrackerError, codehosts.HostError) as e:
         die(str(e))
 
 

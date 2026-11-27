@@ -113,9 +113,17 @@ class GitHub:
         """GitHub issues have no workflow status to move."""
         return None
 
-    def on_merged(self, job):
-        """The PR's `Closes #n` closes the issue; nothing else to do."""
+    def on_merged(self, job, how):
+        """A GitHub PR's `Closes #n` closes the issue. Without one (git mode),
+        say how it merged and close the issue here."""
+        if job.get("pr"):
+            return None
+        self.comment(job["issue"], f"### Factory: merged\n\n{how}")
+        self._gh("issue", "close", str(job["issue"]))
         return None
+
+    def merge_followup(self):
+        return " and closes this issue"
 
     def on_rejected(self, job):
         """The label comes off; there's no status to put back."""
@@ -339,8 +347,8 @@ class Jira:
         except TrackerError as e:
             return str(e)
 
-    def on_merged(self, job):
-        """Comment with the PR and move the issue to merged_status.
+    def on_merged(self, job, how):
+        """Say how it merged and move the issue to merged_status.
 
         Returns a warning string when the move failed; the merge itself stands.
         """
@@ -350,8 +358,11 @@ class Jira:
             why = str(e)
         note = (f"Moved to {self.merged_status}." if why is None
                 else f"Couldn't move it to {self.merged_status}: {why}")
-        self.comment(job["issue"], f"### Factory: merged\n\nMerged in [PR #{job['pr']}]({job['pr_url']}). {note}")
+        self.comment(job["issue"], f"### Factory: merged\n\n{how} {note}")
         return why
+
+    def merge_followup(self):
+        return f" and moves this ticket to {self.merged_status}"
 
     def notify_escalation(self, job):
         """People watch Jira, not the PR: point them at it."""
