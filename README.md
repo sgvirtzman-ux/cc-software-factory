@@ -1,10 +1,12 @@
 # Software Factory for Claude Code
 
 A software factory that works through your issues, in GitHub Issues or Jira
-Cloud. Label an issue `factory`, run `/factory run`, and agents decide whether it's worth building,
-write a spec, build it, test it with your own checks, review it, and open a
-pull request that closes the issue. The approver merges what it's sure of and
-hands you the rest.
+Cloud, on code hosted anywhere git runs. Label an issue `factory`, run
+`/factory run`, and agents decide whether it's worth building, write a spec,
+build it, test it with your own checks, and review it. On GitHub the approver
+opens and merges the pull request when it's sure and hands you the rest. On
+any other host (Azure DevOps, GitLab, Bitbucket) it hands your team a
+finished, reviewed branch to open a PR from, and notices when you merge it.
 
 ## Install
 
@@ -16,16 +18,17 @@ Install this software factory in this project from the reference repository:
 https://github.com/sgvirtzman-ux/cc-software-factory/tree/main
 ```
 
-Your agent reads [`INSTALL.md`](INSTALL.md), asks whether your issues live in
-GitHub Issues or Jira Cloud, copies the skill, agents, scripts and dashboard, fills `factory/checks.sh` with your project's real test, lint,
-typecheck and build commands, tailors the reviewers to your stack, creates the
-labels, and checks that `checks.sh` passes on `main`.
+Your agent reads [`INSTALL.md`](INSTALL.md), asks where your issues and your
+code live, copies the skill, agents, scripts and dashboard, fills
+`factory/checks.sh` with your project's real test, lint, typecheck and build
+commands, tailors the reviewers to your stack, creates the labels, and checks
+that `checks.sh` passes on `main`.
 
-You need Claude Code 2.1.257 or later, `python3` 3.10 or later, and an
-authenticated [`gh`](https://cli.github.com/) that can push to the repo. If
-your project has pages, the builder and the UX and UI reviewers also need the
-`agent-browser` CLI to look at them. For Jira you also need an Atlassian API
-token; the code and PRs stay on GitHub.
+You need Claude Code 2.1.257 or later, `python3` 3.10 or later, and a git
+remote you can push to. For GitHub PRs or GitHub Issues you also need an
+authenticated [`gh`](https://cli.github.com/); for Jira, an Atlassian API
+token. If your project has pages, the builder and the UX and UI reviewers also
+need the `agent-browser` CLI to look at them.
 
 ## The loop
 
@@ -40,15 +43,18 @@ route (script)    picks reviewers and models from config.json
         ▼
 spec-writer (opus) → spec.md
         ▼
-builder (opus) → commits, pushes, opens a draft PR linked to the issue
+builder (opus) → commits, pushes (GitHub: the factory opens a draft PR)
         ▼            ▲
 gate (script) ─FAIL──┤  factory/checks.sh; no reviewer runs on a failing build
         ▼ PASS       │
 reviewers ─CHANGES───┘  code (haiku | sonnet), + ux & ui on UI changes, + security
         ▼ all PASS
-approver (opus) ── APPROVE  → sync with main, gate again, gh pr merge
+approver (opus) ── APPROVE  → sync with main, gate again, then
+                │              GitHub: gh pr merge
+                │              git:    push, hand the branch to your team for a PR;
+                │                      the factory sees the merge in git history
                 │              (Jira: the issue moves to QA Ready, or your status)
-                └─ ESCALATE → PR ready for you, issue labeled factory:needs-human
+                └─ ESCALATE → issue labeled factory:needs-human, with the question
 ```
 
 One Claude Code session orchestrates every job, `concurrency` at a time
@@ -88,6 +94,7 @@ factory/
   bin/gate                    runs checks.sh in a job's worktree → round-N/checks.md
   bin/route                   risk + surfaces → the job's reviewers and models
   lib/tracker.py              GitHub Issues or Jira Cloud: the queue, comments, labels
+  lib/codehost.py             GitHub PRs or plain git: how a job's change reaches main
   dashboard.html              the board
 examples/jobs/                finished jobs from a real run
 INSTALL.md                    instructions for the installing agent
@@ -96,20 +103,37 @@ DESIGN.md                     how it works and why
 
 [`DESIGN.md`](DESIGN.md) explains each decision.
 
-## GitHub Issues or Jira
+## Where code lives: GitHub or plain git
 
-`tracker` in `factory/config.json` picks where issues live. Either way the code
-lives on GitHub: branches, PRs and merges go through `gh`.
+`codehost` in `factory/config.json` picks how a job ends. Branches, worktrees,
+pushes and syncing with `main` are plain git in both modes.
 
-- **GitHub Issues**: a PR says `Closes #12`, so merging it closes the issue.
+- **GitHub** (`"type": "github"`): the factory opens a draft PR for each job,
+  marks it ready, and merges it with `gh pr merge` when the approver approves.
+- **Plain git** (`"type": "git"`): no hosting API at all, so it works on Azure
+  DevOps, GitLab, Bitbucket or anything else. When the approver approves, the
+  factory syncs the branch with `main`, runs the checks again, pushes it, and
+  tells the issue it's ready for a pull request, with a one-click "create PR"
+  link if you set `pr_url`. Your team opens the PR and merges it with your
+  normal reviewers and branch policies. The factory checks git history for the
+  merge: merge commits and rebase merges are detected automatically; for a
+  squash merge, tell the factory it's merged (`job merged`). Review comments
+  from the PR can go back to the factory as feedback.
+
+## Where issues live: GitHub Issues or Jira
+
+`tracker` in `factory/config.json` picks where issues live.
+
+- **GitHub Issues**: a PR says `Closes #12`, so merging it closes the issue. In
+  git mode the factory closes the issue itself when it sees the merge.
 - **Jira Cloud**: the factory follows your workflow the way your team would.
   It picks up issues labeled `factory` in your ready status (for example
   `Sprint Ready`), moves each one to `In Progress` when intake accepts it, and
-  to `QA Ready` when its PR merges, with a comment linking the PR. If you
-  reject a job after it started, the issue goes back to `Sprint Ready`. It reads
-  and writes through the REST API with an API token, posts its decisions as
-  comments, and titles each PR with the issue key (`PROJ-12: ...`) so Jira's
-  GitHub integration can link them. Issue ids look like `PROJ-12` everywhere:
+  to `QA Ready` when its work merges, with a comment saying how. If you
+  reject a job after it started, the issue goes back to `Sprint Ready`. It
+  reads and writes through the REST API with an API token, posts its decisions
+  as comments, and puts the issue key in each PR's title (`PROJ-12: ...`) so a
+  Jira integration for your code host can link them. Issue ids look like `PROJ-12` everywhere:
   `/factory run PROJ-12`.
 
 ## Dashboard
@@ -154,8 +178,8 @@ They come from a test run on a small private calculator repo, with
   write access can add labels. On Jira, anyone who can edit an issue can, so
   check who has the project's Edit Issues permission before you turn it on.
   Issue text reaches the agents as quoted data, never as their instructions.
-- The factory pushes only `factory/*` branches, merges only through
-  `gh pr merge`, and never deploys.
+- The factory pushes only `factory/*` branches and never deploys. On GitHub it
+  merges only through `gh pr merge`; in git mode it never merges at all.
 
 ## License
 

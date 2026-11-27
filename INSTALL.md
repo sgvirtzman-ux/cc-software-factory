@@ -7,7 +7,7 @@ project's root. Don't clone this repository.
 The source is the folder the user pointed you at. On GitHub, read files from
 `https://raw.githubusercontent.com/sgvirtzman-ux/cc-software-factory/main/<path>`.
 
-## 0. Choose the tracker and check the project
+## 0. Choose the tracker and the code host, and check the project
 
 Ask the user where the factory's issues live:
 
@@ -20,15 +20,28 @@ Ask the user where the factory's issues live:
   and what it moves to when the work is done (`QA Ready`). Jira Data Center
   isn't supported.
 
-Code always stays on GitHub: branches, PRs and merges go through `gh` either
-way, so everything below about `gh` and the repo applies to both.
+Then ask how finished work should reach the default branch:
+
+- **GitHub pull requests** (`github`, the default when `origin` is on GitHub):
+  the factory opens a draft PR per job and merges it when the approver
+  approves.
+- **Plain git** (`git`, for Azure DevOps, GitLab, Bitbucket or any other host,
+  or a GitHub repo where the team merges every PR itself): the factory pushes
+  each finished branch and hands it to the team, who open the PR and merge it
+  with their usual reviews and branch policies. Ask which merge type the team
+  usually uses: a merge commit or a rebase merge is detected automatically,
+  and a squash merge needs `factory/bin/job merged <id>`. Optionally ask for
+  the host's "create pull request" URL, to put a one-click link on each
+  hand-off (see `pr_url` below).
 
 Stop and tell the user if any of these fail:
 
-- It's a git repo with an `origin` on GitHub, and `gh auth status` shows a user
-  who can push to it and manage its labels.
-- Its default branch (`gh repo view --json defaultBranchRef`) exists on
-  `origin`.
+- It's a git repo with an `origin` the user can push to
+  (`git push --dry-run origin HEAD` succeeds, or the user confirms they push
+  to it).
+- Its default branch exists on `origin` (`git ls-remote --heads origin <branch>`).
+- With GitHub PRs or GitHub Issues: `gh auth status` shows a user who can push
+  to the repo and manage its labels. In git mode with Jira, `gh` isn't needed.
 - `claude --version` is 2.1.257 or later (the intake agent runs on Fable).
 - `python3 --version` is 3.10 or later. The scripts use only the standard
   library.
@@ -65,6 +78,7 @@ factory/bin/job
 factory/bin/gate
 factory/bin/route
 factory/lib/tracker.py
+factory/lib/codehost.py
 factory/dashboard.html
 ```
 
@@ -93,8 +107,23 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
 **`factory/config.json`.**
 
 - `base_branch`: the default branch.
-- `merge_method`: `merge`, `squash` or `rebase`, one the repo allows
+- `merge_method` (GitHub PRs only): `merge`, `squash` or `rebase`, one the
+  repo allows
   (`gh api repos/{owner}/{repo} --jq '{allow_merge_commit, allow_squash_merge, allow_rebase_merge}'`).
+- `codehost`: leave `{ "type": "github" }` for GitHub PRs. For plain git:
+
+  ```json
+  "codehost": {
+    "type": "git",
+    "pr_url": "https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequestcreate?sourceRef={branch}&targetRef={base}"
+  }
+  ```
+
+  `pr_url` is optional: a link to the host's "create pull request" page, with
+  `{branch}` and `{base}` filled in for each job. The example is Azure DevOps;
+  on GitLab it's
+  `https://<host>/<group>/<repo>/-/merge_requests/new?merge_request[source_branch]={branch}&merge_request[target_branch]={base}`.
+  Leave it out and the hand-off names the branch instead.
 - `protected_paths`: keep the two factory entries and don't add the project's
   tests. Features legitimately change existing tests (a new required field
   changes every fixture), and a protected test blocks the job with no way
@@ -183,8 +212,9 @@ Then add a short section:
 ## Software factory
 
 `/factory run` builds every open issue labeled `factory` (in <GitHub Issues |
-the Jira project KEY>) through
-intake → spec → build → gate → review → approve, one PR per issue. State is in
+the Jira project KEY>) through intake → spec → build → gate → review → approve,
+one branch and PR per issue (<the factory merges on GitHub | the team opens and
+merges the PR from the handed-off `factory/<job-id>` branch>). State is in
 `factory/jobs/` (gitignored); `factory/bin/job` is its only writer. Checks:
 `factory/checks.sh`. Dashboard: `cd factory && python3 -m http.server`, then
 open http://localhost:8000/dashboard.html.
@@ -215,16 +245,20 @@ On GitHub, create them:
 gh label create factory --color 5319E7 --description "Build this with the software factory"
 gh label create factory:needs-info --color FBCA04 --description "The factory asked the author a question"
 gh label create factory:needs-human --color D93F0B --description "The factory needs a human decision on the PR"
+gh label create factory:ready-for-pr --color 0E8A16 --description "The factory's branch is ready for a pull request"
 ```
+
+The last one is only used in git mode.
 
 ## 3. Verify
 
 1. In the project root, on the current branch, `bash factory/checks.sh` exits 0.
    If it fails there, the factory can never pass a job: fix the
    script (not the project) or tell the user what's broken.
-2. `factory/bin/job check-tracker` succeeds. On Jira it also confirms the
-   project has a status named `merged_status`. Then `factory/bin/job queue`
-   runs without an error.
+2. `factory/bin/job check-tracker` succeeds. It checks the tracker (on Jira,
+   that the configured statuses exist) and the code host (on GitHub, the repo;
+   in git mode, that `origin` has the base branch, and the `pr_url` link it
+   would post). Then `factory/bin/job queue` runs without an error.
 3. Each file in `.claude/agents/` has only these frontmatter keys: `name`,
    `description`, `tools`, `model`, and `hooks` on the builder. Claude Code
    ignores unknown keys without a warning, so a typo silently changes behaviour.
@@ -245,14 +279,19 @@ Then tell the user, in a few lines:
 - Label one or two small issues `factory`, then run `/factory run` in Claude
   Code from the project root.
 - On Jira: label a ticket `factory` once it's in `ready_status`. The factory
-  moves it to `start_status` when it starts and to `merged_status` when the PR
-  merges, with a comment linking the PR. If the workflow refuses a move, the
+  moves it to `start_status` when it starts and to `merged_status` when its
+  work merges, with a comment saying how. If the workflow refuses a move, the
   factory warns and leaves the ticket where it is. Anyone who can edit an issue
   can add the label, so the label only gates as well as the project's Edit
   Issues permission does.
-- Every job ends as a PR. The approver merges what it approves; the rest wait
-  labeled `factory:needs-human`. Approve one by merging it on GitHub, or tell
-  the factory what to change with `/factory <anything>`.
+- On GitHub, every job ends as a PR. The approver merges what it approves;
+  the rest wait labeled `factory:needs-human`. Approve one by merging it, or
+  tell the factory what to change with `/factory <anything>`.
+- In git mode, every approved job ends as a branch labeled
+  `factory:ready-for-pr` on the issue. Open a PR from it and merge it as
+  usual; the next `/factory run` sees the merge and finishes the job. PR review
+  comments go back to the factory with `/factory <anything>`. For a squash
+  merge, tell the factory it's merged.
 - Intake runs on Fable, once per issue. Depending on their plan, Fable can
   bill to usage credits rather than the plan's included usage.
 - To start carefully, set `concurrency` to 1 in `factory/config.json` and read

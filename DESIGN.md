@@ -2,7 +2,7 @@
 
 How the factory works, and why it's built this way. The source is small
 enough to read in one sitting: one skill, eight agents, three scripts, a
-tracker module and a config file.
+tracker module, a code-host module and a config file.
 
 ## The idea
 
@@ -20,6 +20,7 @@ skim a job on the dashboard and read the detail only where it matters.
 |---|---|---|
 | Queue | Issues labeled `factory`, in GitHub Issues or Jira Cloud | What to build. Anyone can file an issue; the label decides what runs. |
 | Tracker | `factory/lib/tracker.py` | The only code that talks to the issue tracker: the queue, issue text, comments, labels, and the hand-off after a merge. |
+| Code host | `factory/lib/codehost.py` | The only code that knows where the repo is hosted: GitHub PRs, or plain git with a hand-off to the team. |
 | Orchestrator | `.claude/skills/factory/SKILL.md` | The session that runs `/factory`. Starts jobs, spawns agents, calls the scripts. Writes nothing itself. |
 | Agents | `.claude/agents/*.md` | One file per role. Each reads files, writes exactly one file, and replies with one line. |
 | State | `factory/jobs/<job-id>/` | `job.json` plus every agent's file. Gitignored, local to the machine running the factory. |
@@ -34,10 +35,11 @@ intake (fable)     → ACCEPT (scope possibly changed) | NEEDS-INFO | REJECT, po
 route (script)     → reviewers + models from risk/surfaces via config.json
 worktree           → factory/<job-id> from origin/main
 spec-writer (opus) → spec.md
-builder            → commits; first round pushes + opens draft PR linked to the issue
+builder            → commits and pushes; on GitHub the factory opens the draft PR
 gate (script)      → checks.sh; FAIL → builder gets the log, no reviewers spawned
 reviewers (routed) → parallel, WAIT FOR ALL; CHANGES → builder → gate → reviewers (max rounds)
-approver (opus)    → APPROVE: sync origin/main, gate, gh pr merge
+approver (opus)    → APPROVE: sync origin/main, gate, then gh pr merge (github)
+                              or push and hand the branch to the team (git)
                      ESCALATE: PR ready, decision as PR comment, label factory:needs-human
 ```
 
@@ -75,6 +77,23 @@ subset the agents write (headings, lists, quotes, code, bold, links) to ADF and
 flattens ADF back to text for `issue.md`. Factory comments carry a comment
 property, Jira's version of GitHub's hidden `<!-- factory -->` marker, so a
 reply from the author can be told apart from the factory's own question.
+
+**Git is the interface; a PR API is optional.** A pull request isn't a git
+feature: every host has its own PR API. The factory needs one only to open and
+merge PRs itself, so `codehost` makes it optional. In `github` mode it does,
+through `gh`. In `git` mode it uses nothing but git, so it works on Azure
+DevOps, GitLab, Bitbucket or a bare server. It needs no host token, and the
+team's branch policies keep working because people open and complete the PR
+exactly as they always have. The job ends in `handoff`: the branch is synced
+with the base, gated again and pushed, the issue says it's ready, and the job
+waits without holding a slot. The factory then watches git, not the host: a
+merge commit or fast-forward contains the handed-off commit, which
+`git merge-base --is-ancestor` settles exactly, and a rebase merge keeps each
+commit's changes, which `git log --cherry-mark` matches. A squash merge
+rewrites the change into one new commit that git can't trace back reliably,
+so `job merged` marks it by hand. PR creation moved from the builder into
+`factory/bin/job` for the same reason: no agent needs to know which host
+you use.
 
 **One orchestrator for every job.** The session running `/factory run` starts up
 to `concurrency` jobs and spawns every agent as a background subagent. There
@@ -121,19 +140,22 @@ as a nudge; the gate is still what decides.
 **Agents judge what scripts can't.** Reviewers don't re-run the test suite;
 they read the diff for correctness, scope, security, UX and visual fit.
 
-**A PR per issue, merged through GitHub.** Merging locally breaks when the
-main checkout is dirty or busy. The factory merges with `gh pr merge`, so branch
-protection, required checks and the PR history all apply, and your main
-checkout is never touched. Before merging, the branch is synced with `main` and
+**A PR per issue, merged through the host.** Merging locally breaks when the
+main checkout is dirty or busy, and it would bypass branch policies. On GitHub
+the factory merges with `gh pr merge`; in git mode your team merges through
+its own PR. Either way branch protection, required checks and the PR history
+all apply, and your main checkout is never touched. Before merging, the branch is synced with `main` and
 gated again, because another job may have merged since it was tested.
 
-**You approve by merging.** The approver merges what it would merge itself and
-escalates the rest with a specific question. An escalated PR is ready for
-review and its issue is labeled `factory:needs-human`. Merge it to approve, or
-tell the factory what to change with `/factory <anything>`: your words go to
-the builder as `feedback-<k>.md` and the job runs another round. To drop a
-job that waits on you or on its author, tell the factory to reject it: the
-reason goes on the issue, its PR closes, and the job moves to Done.
+**You approve by merging.** The approver approves what it would merge itself
+and escalates the rest with a specific question; the issue is labeled
+`factory:needs-human`. On GitHub an approved PR merges, and an escalated one is
+ready for you: merge it to approve. In git mode every finished job is a branch
+for your team's PR. Either way, tell the factory what to change with
+`/factory <anything>`: your words go to the builder as `feedback-<k>.md` and
+the job runs another round. To drop a job that waits on you or on its author,
+tell the factory to reject it: the reason goes on the issue, its PR closes or
+its branch is deleted, and the job moves to Done.
 
 **State is files, so runs resume.** Every fact the orchestrator needs is in
 `factory/jobs/`. If the session dies or compacts, a fresh `/factory run` reads
@@ -159,8 +181,9 @@ break this.
 - Issue text reaches agents as quoted data in `issue.md`, with comments only
   from the issue's author (the reporter, on Jira) and the factory's operator.
   It is never part of a prompt. Intake, which reads it first, has no shell.
-- Agents push only `factory/*` branches. Only `factory/bin/job merge` merges,
-  through `gh pr merge`. The factory never deploys.
+- Agents push only `factory/*` branches. On GitHub only `factory/bin/job
+  merge` merges, through `gh pr merge`; in git mode the factory never merges.
+  The factory never deploys.
 - One PR per issue; at most `max_rounds` build rounds per job before a human
   is asked.
 

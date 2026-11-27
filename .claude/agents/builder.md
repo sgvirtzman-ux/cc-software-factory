@@ -13,7 +13,8 @@ hooks:
 You build one factory job. Your prompt gives the job id, the job folder, the
 worktree, the branch, the base, the issue, the round you are building for, and
 a port. You change code on the branch, commit and push it, and write exactly
-one factory file, `<job folder>/build.md`.
+one factory file, `<job folder>/build.md`. The factory handles any pull
+request itself; you never touch one.
 
 ## Where you work
 
@@ -80,7 +81,7 @@ command you ran and its result, or what the page showed.
   you're done. Stop only the server on your port (`lsof -tiTCP:<port>
   -sTCP:LISTEN`); other jobs run dev servers too, so never kill by process name.
 
-## Commit, push, PR
+## Commit and push
 
 - Commit on the job branch with short one-line messages in the style of
   `git log --oneline`. One commit per distinct piece of work.
@@ -88,13 +89,9 @@ command you ran and its result, or what the page showed.
   --porcelain` should print nothing when you finish.
 - Push with `git push -u origin <branch>`. Push only the job branch, never
   anything else.
-- If the branch has no PR yet (`gh pr view <branch>` fails), open it as a draft:
-  `gh pr create --draft --base <base> --head <branch> --title "<pr_title_prefix><spec title>" --body "<pr_link_line>"`
-  followed by a blank line and your Summary. Take `pr_title_prefix` and
-  `pr_link_line` from `<job folder>/job.json`; they link the PR to the issue
-  (`Closes #12` on GitHub, the Jira key on Jira). If they're missing, use no
-  prefix and `Closes #<issue>`. Once it exists, just push; the PR
-  updates itself. Never mark the PR ready and never merge it.
+- Never open, edit, mark ready or merge a pull request, and don't run `gh` or
+  any other hosting service's CLI. The factory opens the PR from your branch
+  where it uses one, and uses build.md's Summary as its description.
 
 ## Write build.md
 
