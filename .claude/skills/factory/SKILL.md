@@ -47,28 +47,35 @@ build → gate → review pass. `factory/bin/job advance` sends the job to
 
 ## Files
 
-`<repo>` is the main checkout (`git rev-parse --show-toplevel` from your
-session). It stays the user's: you and the agents never change it except
-through the scripts. `factory/jobs/` is gitignored runtime state.
+`<root>` is the folder your session started in, the one that holds
+`factory/`. It is either the repo the factory builds, or a workspace: a folder
+of several repo clones listed under `repos` in `config.json`. In a workspace
+each job builds in one repo, which intake picks (or a `factory:<repo>` label
+fixes), and the job's worktree lives in `<root>/.worktrees/<repo>/`. The repos'
+own checkouts stay the user's: you and the agents never change them except
+through the scripts. `factory/jobs/` is runtime state.
 
 ```
-<repo>/factory/config.json                     concurrency, rounds, labels, routing, prices
-<repo>/factory/checks.sh                       the repo's checks; the gate runs it
-<repo>/factory/bin/job                         the only writer of job.json
-<repo>/factory/bin/gate                        runs checks.sh in a worktree → round-N/checks.md
-<repo>/factory/bin/route                       risk + surfaces → the job's agents
-<repo>/factory/lib/tracker.py                  the issue tracker: GitHub Issues or Jira
-<repo>/factory/lib/codehost.py                 the code host: GitHub PRs or plain git
-<repo>/factory/jobs/<job-id>/job.json          the job's state; the dashboard reads it
-<repo>/factory/jobs/<job-id>/issue.md          the issue, quoted as data
-<repo>/factory/jobs/<job-id>/intake.md         intake's decision, scope, risk, surfaces
-<repo>/factory/jobs/<job-id>/spec.md
-<repo>/factory/jobs/<job-id>/build.md
-<repo>/factory/jobs/<job-id>/round-<N>/checks.md        the gate's verdict for round N
-<repo>/factory/jobs/<job-id>/round-<N>/review-<r>.md    one per routed reviewer
-<repo>/factory/jobs/<job-id>/decision.md                APPROVE or ESCALATE
-<repo>/factory/jobs/<job-id>/feedback-<k>.md            the user's feedback on an escalated job
-<repo>/.worktrees/<job-id>/                    the job's worktree, on factory/<job-id>
+<root>/factory/config.json                     concurrency, rounds, labels, routing, prices
+<root>/factory/checks.sh                       the repo's checks; the gate runs them
+<root>/factory/checks/<repo>.sh                in a workspace, each repo's checks
+<root>/factory/bin/job                         the only writer of job.json
+<root>/factory/bin/gate                        runs checks.sh in a worktree → round-N/checks.md
+<root>/factory/bin/route                       risk + surfaces → the job's agents
+<root>/factory/lib/tracker.py                  the issue tracker: GitHub Issues or Jira
+<root>/factory/lib/codehost.py                 the code host: GitHub PRs or plain git
+<root>/factory/lib/workspace.py                one repo, or a workspace of several
+<root>/factory/jobs/<job-id>/job.json          the job's state; the dashboard reads it
+<root>/factory/jobs/<job-id>/issue.md          the issue, quoted as data
+<root>/factory/jobs/<job-id>/intake.md         intake's decision, scope, risk, surfaces
+<root>/factory/jobs/<job-id>/spec.md
+<root>/factory/jobs/<job-id>/build.md
+<root>/factory/jobs/<job-id>/round-<N>/checks.md        the gate's verdict for round N
+<root>/factory/jobs/<job-id>/round-<N>/review-<r>.md    one per routed reviewer
+<root>/factory/jobs/<job-id>/decision.md                APPROVE or ESCALATE
+<root>/factory/jobs/<job-id>/feedback-<k>.md            the user's feedback on an escalated job
+<root>/.worktrees/<job-id>/                    the job's worktree, on factory/<job-id>
+<root>/.worktrees/<repo>/<job-id>/             the same, in a workspace
 ```
 
 Read `job.json` with `cat` when you need a field. Read agents' files only by
@@ -84,17 +91,14 @@ approver: their frontmatter sets it. Each agent replies with one line;
 you are notified when it finishes, and you advance that job then. While agents
 run, don't poll and don't wait: end your turn with a one-line status.
 
-Every prompt starts with the job's header, built from `job.json`:
+Every prompt starts with the job's header: the line `factory/bin/job header
+<id>` prints, copied exactly. It names the job folder, the workspace, the repo,
+the worktree, the branch, the base and the issue. Run it again after intake
+accepts a job in a workspace: the repo, worktree and base only exist from then
+on.
 
-```
-Job: <id>. Job folder: <repo>/factory/jobs/<id>/. Main checkout: <repo>. Worktree: <worktree>. Branch: <branch>. Base: origin/<base>. Issue: <issue_ref>.
-```
-
-`<issue_ref>` is `issue_ref` in `job.json` (`#12` or `PROJ-12`); for an older
-job without it, use `#<issue>`.
-
-`<header>` below means that line. Keep `Job folder: <path>/` exactly as shown:
-the job's cost is found by that string.
+`<header>` below means that line. Never edit it: the job's cost is found by
+its `Job folder: <path>/` string.
 
 Agents that open pages get ports. With `n` the job number (`004` → 4), the
 builder gets `5100 + 10n`, `reviewer-ux` `5101 + 10n` and `reviewer-ui`
@@ -113,9 +117,11 @@ short line per transition, e.g. `004-dark-mode #12: gate PASS → reviewing (cod
 decision:
 
 - `ACCEPT`: run `factory/bin/route <id>`, then `factory/bin/job advance <id> spec`
-  (it comments on the issue, moves a Jira issue to its in-progress status, and
+  (in a workspace it places the job in intake's `REPO`, or the label's; then it
+  comments on the issue, moves a Jira issue to its in-progress status, and
   creates the worktree). Go to **spec**. If it prints a warning, pass it on to
-  the user and carry on.
+  the user and carry on. If it refuses because `REPO` is missing or isn't a
+  configured repo, resume intake once with the refusal.
 - `NEEDS-INFO`: `factory/bin/job advance <id> needs-info`. The job parks until
   the author replies.
 - `REJECT`: `factory/bin/job advance <id> rejected`.

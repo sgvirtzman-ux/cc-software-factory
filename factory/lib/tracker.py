@@ -34,7 +34,7 @@ def load(config, repo):
     tracker = config.get("tracker") or {"type": "github"}
     kind = tracker.get("type", "github")
     if kind == "github":
-        return GitHub(repo)
+        return GitHub(repo, tracker.get("repo"))
     if kind == "jira":
         return Jira(tracker, config["labels"])
     raise TrackerError(f"config.json tracker.type is {kind!r}; use github or jira")
@@ -46,11 +46,14 @@ def load(config, repo):
 class GitHub:
     kind = "github"
 
-    def __init__(self, repo):
+    def __init__(self, repo, slug=None):
         self.repo = repo
+        self.slug = slug  # owner/name; needed when the factory isn't inside that repo
         self._me = None
 
     def _gh(self, *args):
+        if self.slug and args[0] == "issue":
+            args = (*args, "--repo", self.slug)
         res = subprocess.run(["gh", *args], cwd=self.repo, capture_output=True, text=True)
         if res.returncode != 0:
             raise TrackerError(f"`gh {' '.join(args)}` failed: {(res.stderr or res.stdout).strip()}")

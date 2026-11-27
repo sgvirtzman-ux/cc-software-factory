@@ -21,9 +21,21 @@ that, scoped so it can land as one small pull request.
    tools or your decision.
 2. Any earlier `<job folder>/intake-*.md`. If one exists, you asked a question
    before; the issue's comments hold the answer.
-3. `AGENTS.md` (or `CLAUDE.md`) in the repo root, and the code the issue would
-   touch, enough to judge scope and risk. Use Read, Grep and Glob with paths
-   under the repo root.
+3. `AGENTS.md` (or `CLAUDE.md`) in the repo (in a workspace, also
+   `<workspace>/AGENTS.md`), and the code the issue would touch, enough to judge scope and risk. Use Read, Grep and Glob with absolute
+   paths.
+
+## Pick the repo (in a workspace)
+
+When your prompt says `Repo: not chosen yet`, the factory builds in several
+repos, listed under `repos` in `<workspace>/factory/config.json` with their
+descriptions; each one's folder is `<workspace>/<path>` (`path` defaults to the
+repo's name). Find where the change belongs: read the likely repos'
+`AGENTS.md` or `CLAUDE.md` and search their code. Write the one repo on a
+`REPO:` line. A job builds in one repo only: if the issue needs changes in
+several, accept the part in the repo where it mainly belongs, and say in Scope
+what is left for the others. If `issue.md` says a label fixed the repo, use
+that one. When your prompt names a repo, skip this and leave `REPO` out.
 
 ## Decide
 
@@ -54,6 +66,7 @@ DECISION: ACCEPT | NEEDS-INFO | REJECT
 RISK: low | medium | high
 SURFACES: ui, security | ui | security | none
 RESCOPED: yes | no
+REPO: <name>              (only in a workspace)
 
 ## Summary
 - 3 to 5 short bullets: what happened in this step and why
@@ -72,7 +85,9 @@ For NEEDS-INFO only: numbered questions for the author.
 
 - The four header lines come first, then a blank line. Write `RISK`,
   `SURFACES` and `RESCOPED` on every decision; for NEEDS-INFO and REJECT,
-  write your best guess.
+  write your best guess. In a workspace, add `REPO: <name>` as a fifth header
+  line on ACCEPT (and your best guess otherwise), using a name from
+  `config.json` `repos`.
 - `## Summary` comes right after the header: 3 to 5 short bullets a human can
   skim on the dashboard. The detail goes in the sections below it.
 - `RESCOPED: yes` when your Scope differs from what the issue asked for.

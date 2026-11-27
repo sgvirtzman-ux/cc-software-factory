@@ -1,8 +1,8 @@
 # Design
 
 How the factory works, and why it's built this way. The source is small
-enough to read in one sitting: one skill, eight agents, three scripts, a
-tracker module, a code-host module and a config file.
+enough to read in one sitting: one skill, eight agents, three scripts, three
+small modules (tracker, code host, workspace) and a config file.
 
 ## The idea
 
@@ -21,6 +21,7 @@ skim a job on the dashboard and read the detail only where it matters.
 | Queue | Issues labeled `factory`, in GitHub Issues or Jira Cloud | What to build. Anyone can file an issue; the label decides what runs. |
 | Tracker | `factory/lib/tracker.py` | The only code that talks to the issue tracker: the queue, issue text, comments, labels, and the hand-off after a merge. |
 | Code host | `factory/lib/codehost.py` | The only code that knows where the repo is hosted: GitHub PRs, or plain git with a hand-off to the team. |
+| Workspace | `factory/lib/workspace.py` | Which repos the factory builds: the one it lives in, or several clones in the folder it lives in. |
 | Orchestrator | `.claude/skills/factory/SKILL.md` | The session that runs `/factory`. Starts jobs, spawns agents, calls the scripts. Writes nothing itself. |
 | Agents | `.claude/agents/*.md` | One file per role. Each reads files, writes exactly one file, and replies with one line. |
 | State | `factory/jobs/<job-id>/` | `job.json` plus every agent's file. Gitignored, local to the machine running the factory. |
@@ -94,6 +95,24 @@ rewrites the change into one new commit that git can't trace back reliably,
 so `job merged` marks it by hand. PR creation moved from the builder into
 `factory/bin/job` for the same reason: no agent needs to know which host
 you use.
+
+**One factory can serve many repos.** Work tracked in one place (a Jira
+project, say) often lands in several repos. Installing a factory per repo
+would mean several queues fighting over one label, and an install in every
+repo. Instead the factory can live in the folder that holds the clones, with
+the repos listed in `config.json`. Each job still builds in exactly one repo:
+intake chooses it, because it already reads the code to judge scope, and a
+`factory:<repo>` label overrides it when a person knows better. The choice is
+a `REPO:` line in `intake.md`, checked against the list before anything is
+created. Worktrees go in the workspace's `.worktrees/<repo>/`, outside the
+repos, so the factory never writes to a repo except through its own
+`factory/*` branches. Each repo's checks script lives in the workspace too, so
+no branch can edit the checks it's judged by. The agents are told their
+worktree, repo and base in every prompt's header, which `job header` prints,
+so they work the same in either layout. One repo per job keeps state, the gate
+and merge detection simple. An issue that spans repos is cut to its main repo
+and the rest is named, which is what intake already does with any issue too
+big for one PR.
 
 **One orchestrator for every job.** The session running `/factory run` starts up
 to `concurrency` jobs and spawns every agent as a background subagent. There

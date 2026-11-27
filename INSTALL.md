@@ -7,6 +7,12 @@ project's root. Don't clone this repository.
 The source is the folder the user pointed you at. On GitHub, read files from
 `https://raw.githubusercontent.com/sgvirtzman-ux/cc-software-factory/main/<path>`.
 
+First, look at the folder you're in. If it's a git repo, the factory builds
+that repo: follow the steps as written. If it isn't, and it holds several git
+clones side by side, it's a **workspace**: one factory builds in all of those
+repos, picking the repo per job. Confirm with the user, then follow the same
+steps with the changes in **Workspace install** at the end.
+
 ## 0. Choose the tracker and the code host, and check the project
 
 Ask the user where the factory's issues live:
@@ -79,6 +85,7 @@ factory/bin/gate
 factory/bin/route
 factory/lib/tracker.py
 factory/lib/codehost.py
+factory/lib/workspace.py
 factory/dashboard.html
 ```
 
@@ -120,10 +127,22 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
   ```
 
   `pr_url` is optional: a link to the host's "create pull request" page, with
-  `{branch}` and `{base}` filled in for each job. The example is Azure DevOps;
-  on GitLab it's
+  `{branch}` and `{base}` filled in for each job. Build it from
+  `git remote get-url origin` rather than asking the user. On Azure DevOps the
+  remote holds the organization, project and repo in one of these forms:
+
+  - `https://<org>@dev.azure.com/<org>/<project>/_git/<repo>`
+  - `https://<org>.visualstudio.com/<project>/_git/<repo>` (older; may include
+    `DefaultCollection/` before the project)
+  - `git@ssh.dev.azure.com:v3/<org>/<project>/<repo>`
+
+  and the link is
+  `https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequestcreate?sourceRef={branch}&targetRef={base}`
+  (keep any URL-encoding, such as `%20`, in the project or repo name). On
+  GitLab it's
   `https://<host>/<group>/<repo>/-/merge_requests/new?merge_request[source_branch]={branch}&merge_request[target_branch]={base}`.
-  Leave it out and the hand-off names the branch instead.
+  Show the user the link `factory/bin/job check-tracker` prints and ask them to
+  open it once. Leave `pr_url` out and the hand-off names the branch instead.
 - `protected_paths`: keep the two factory entries and don't add the project's
   tests. Features legitimately change existing tests (a new required field
   changes every fixture), and a protected test blocks the job with no way
@@ -156,7 +175,12 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
 
   The factory makes one move at a time, so each move must be allowed directly
   in the workflow: `ready_status` → `start_status` → `merged_status`, and
-  `start_status` → `ready_status` for rejections. Check
+  `start_status` → `ready_status` for rejections.
+
+  If the Jira project's tickets span several repos, give each repo's install
+  its own queue label, such as `"queue": "factory:<repo>"`, and tell the user
+  to label each ticket for the repo that should build it. With the plain
+  `factory` label, every repo's factory would pick up every ticket. Check
   them in the project's workflow, or with `factory/bin/job check-tracker` and a
   test issue. `ready_status` and `start_status` are optional. Without
   `ready_status` the queue is every labeled issue that isn't Done and isn't in
@@ -296,3 +320,75 @@ Then tell the user, in a few lines:
   bill to usage credits rather than the plan's included usage.
 - To start carefully, set `concurrency` to 1 in `factory/config.json` and read
   every PR until they trust it.
+
+## Workspace install
+
+A workspace is a folder that holds several repo clones, such as `~/src/acme/`
+with `orders/`, `billing/` and `web/` in it. The factory lives in that folder,
+beside the repos and not inside any of them, so installing it changes no repo
+and needs no commit or push. Each job builds in one repo: intake picks it, or a
+`factory:<repo>` label on the issue fixes it. Its worktree goes in the
+workspace's `.worktrees/<repo>/<job-id>`. Change the steps above like this:
+
+**0. Check.** Ask which of the clones the factory should build in; suggest the
+ones the issue tracker's work touches rather than all of them. For each one,
+check that it's a git repo, that its `origin` has its default branch
+(`git -C <repo> ls-remote --symref origin HEAD` names it), and that the user
+can push to it. The workspace folder itself must not be a git repo.
+
+**1. Copy.** Copy the same files into the workspace folder, except
+`factory/checks.sh`: make one checks script per repo instead, at
+`factory/checks/<repo>.sh`, starting from `factory/checks.sh`.
+
+**2. Adapt.**
+
+- Each `factory/checks/<repo>.sh` gets that repo's checks, found the same way
+  as for `factory/checks.sh`. The gate runs it with the job's worktree, a full
+  checkout of that repo, as the working directory.
+- In `factory/config.json`, list the repos. The top-level `base_branch`,
+  `codehost` and `merge_method` are defaults; set per repo what differs:
+
+  ```json
+  "codehost": { "type": "git" },
+  "repos": {
+    "orders": {
+      "description": "Order service: carts, checkout, order history",
+      "base_branch": "main",
+      "codehost": { "type": "git", "pr_url": "https://dev.azure.com/<org>/<project>/_git/orders/pullrequestcreate?sourceRef={branch}&targetRef={base}" }
+    },
+    "billing": { "description": "...", "base_branch": "develop", "codehost": { ... } }
+  }
+  ```
+
+  The key is the repo's folder name. Add `"path"` only when the folder name
+  isn't a usable key. Write each `description` in one line from the repo's
+  README and code: intake reads them to decide where a change belongs. Build
+  each `pr_url` from that repo's own remote, as above. `protected_paths`
+  defaults to none in a workspace, since the factory's own files live outside
+  every repo; set it per repo only for paths no job should ever change.
+- With GitHub Issues as the tracker, set `"tracker": {"type": "github",
+  "repo": "<owner>/<name>"}` to say whose issues to read. Jira needs nothing
+  extra. Don't use per-repo queue labels: one factory takes every `factory`
+  issue and places it.
+- **Jira credentials** go in the workspace's `.claude/settings.local.json`.
+- **`AGENTS.md`.** Don't edit the repos' own files. Create `AGENTS.md` in the
+  workspace folder instead. List each configured repo with its
+  description, then, for any repo whose own `AGENTS.md` or `CLAUDE.md` doesn't
+  already say so, how to set up a fresh checkout, start its dev server on a
+  given port, and run the commands in its checks script. Every agent reads this
+  file as well as the repo's own. Then add the **Software factory** section,
+  saying it builds the listed repos and that worktrees live in
+  `.worktrees/<repo>/<job-id>`.
+- **`.gitignore`**: skip it; the workspace isn't a repo.
+
+**3. Verify.** Instead of step 3.1, run each repo's checks script in that repo
+on its base branch, and fix any that fail:
+`cd <workspace>/<repo> && bash <workspace>/factory/checks/<repo>.sh`.
+`factory/bin/job check-tracker` checks every repo (its checkout, its checks
+script, its `origin` and its PR link). Skip step 3.5.
+
+**4. Hand over.** There's nothing to commit or push. Tell the user to start
+Claude Code in the workspace folder and run `/factory` there; that the factory
+picks the repo per issue, and a `factory:<repo>` label fixes it; and that a
+job builds in one repo, so an issue that spans repos is cut down to its main
+repo, with the rest named in intake's comment.

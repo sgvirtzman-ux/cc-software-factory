@@ -23,14 +23,14 @@ class HostError(Exception):
     pass
 
 
-def load(config, repo):
-    host = config.get("codehost") or {"type": "github"}
-    kind = host.get("type", "github")
+def load(repo):
+    """The code host for one repo (a workspace.Repo): its `codehost` setting."""
+    kind = repo.codehost.get("type", "github")
     if kind == "github":
-        return GitHub(repo, config)
+        return GitHub(repo)
     if kind == "git":
-        return Git(repo, config, host)
-    raise HostError(f"config.json codehost.type is {kind!r}; use github or git")
+        return Git(repo)
+    raise HostError(f"config.json codehost.type for {repo.name} is {kind!r}; use github or git")
 
 
 def _run(cmd, cwd, check=True):
@@ -43,10 +43,10 @@ def _run(cmd, cwd, check=True):
 class GitHub:
     kind = "github"
 
-    def __init__(self, repo, config):
-        self.repo = repo
-        self.base = config["base_branch"]
-        self.merge_method = config.get("merge_method", "merge")
+    def __init__(self, repo):
+        self.repo = repo.path
+        self.base = repo.base
+        self.merge_method = repo.merge_method
 
     def _gh(self, *args):
         return _run(["gh", *args], self.repo).stdout
@@ -101,10 +101,10 @@ class Git:
 
     kind = "git"
 
-    def __init__(self, repo, config, host):
-        self.repo = repo
-        self.base = config["base_branch"]
-        self.pr_url = host.get("pr_url")
+    def __init__(self, repo):
+        self.repo = repo.path
+        self.base = repo.base
+        self.pr_url = repo.codehost.get("pr_url")
         self._fetched = False
 
     def ensure_pr(self, job, title, body):

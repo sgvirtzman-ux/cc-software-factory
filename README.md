@@ -21,7 +21,7 @@ https://github.com/sgvirtzman-ux/cc-software-factory/tree/main
 ```
 
 Your agent reads [`INSTALL.md`](INSTALL.md), asks where your issues and your
-code live, copies the skill, agents, scripts and dashboard, fills
+code live (one repo, or a folder of several clones), copies the skill, agents, scripts and dashboard, fills
 `factory/checks.sh` with your project's real test, lint, typecheck and build
 commands, tailors the reviewers to your stack, creates the labels, and checks
 that `checks.sh` passes on `main`.
@@ -97,6 +97,7 @@ factory/
   bin/route                   risk + surfaces → the job's reviewers and models
   lib/tracker.py              GitHub Issues or Jira Cloud: the queue, comments, labels
   lib/codehost.py             GitHub PRs or plain git: how a job's change reaches main
+  lib/workspace.py            one repo, or a workspace of several: where each job builds
   dashboard.html              the board
 examples/jobs/                finished jobs from a real run
 INSTALL.md                    instructions for the installing agent
@@ -104,6 +105,23 @@ DESIGN.md                     how it works and why
 ```
 
 [`DESIGN.md`](DESIGN.md) explains each decision.
+
+## One repo or a workspace of many
+
+Install the factory in a repo and it builds that repo. Install it in a folder
+that holds several clones, such as the folder you clone all your company's
+repos into, and it builds in all of them from one session:
+
+- `repos` in `factory/config.json` lists them, each with a one-line
+  description and its own base branch, code host and checks script
+  (`factory/checks/<repo>.sh`).
+- Intake picks the repo for each issue by reading the descriptions and the
+  code; a `factory:<repo>` label on the issue overrides it. A job builds in one
+  repo; an issue that spans repos is cut to its main repo, and intake's comment
+  names what's left elsewhere.
+- Worktrees live in the workspace's `.worktrees/<repo>/`, so nothing is
+  installed into, committed to or changed in any repo. Jobs in different repos
+  run side by side up to `concurrency`.
 
 ## Where code lives: GitHub or plain git
 
