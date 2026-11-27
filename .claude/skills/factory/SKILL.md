@@ -236,7 +236,9 @@ new feature, ask.
   ```
 
   It saves `rejection.md`, posts the reason on the issue, removes the factory
-  labels, closes the job's PR if it has one, and moves the job to Done. The
+  labels, closes the job's PR if it has one, and moves the job to Done. On
+  Jira, a ticket the factory had moved to its in-progress status goes back to
+  its ready status; pass on any warning. The
   issue stays open; to bring it back, delete `factory/jobs/<id>` and add the
   `factory` label again.
 - **An answer to a `needs-info` question**: post their words on the issue,

@@ -122,9 +122,12 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
   - When intake accepts an issue, the factory moves it to `start_status`.
   - When its PR merges, the factory moves it to `merged_status` and comments
     with the PR link.
+  - When you reject a job that waits on you, an issue still in `start_status`
+    goes back to `ready_status`. One a person has moved elsewhere stays put.
 
   The factory makes one move at a time, so each move must be allowed directly
-  in the workflow: `ready_status` → `start_status` → `merged_status`. Check
+  in the workflow: `ready_status` → `start_status` → `merged_status`, and
+  `start_status` → `ready_status` for rejections. Check
   them in the project's workflow, or with `factory/bin/job check-tracker` and a
   test issue. `ready_status` and `start_status` are optional. Without
   `ready_status` the queue is every labeled issue that isn't Done and isn't in

@@ -117,6 +117,10 @@ class GitHub:
         """The PR's `Closes #n` closes the issue; nothing else to do."""
         return None
 
+    def on_rejected(self, job):
+        """The label comes off; there's no status to put back."""
+        return None
+
     def notify_escalation(self, job):
         """The PR links the issue, so the PR comment is enough."""
         return None
@@ -291,10 +295,13 @@ class Jira:
             "issuetype": {"name": self.issue_type}, "labels": [label]}})
         return res["key"]
 
+    def status(self, key):
+        issue = self._req("GET", self._issue_path(key), query={"fields": "status"})
+        return (issue["fields"].get("status") or {}).get("name", "")
+
     def transition_to(self, key, status):
         """Move the issue to `status`. Returns None on success, or why it couldn't."""
-        current = self._req("GET", self._issue_path(key), query={"fields": "status"})
-        if (current["fields"].get("status") or {}).get("name", "").casefold() == status.casefold():
+        if self.status(key).casefold() == status.casefold():
             return None
         options = self._req("GET", self._issue_path(key, "/transitions"))["transitions"]
         match = [t for t in options if t.get("to", {}).get("name", "").casefold() == status.casefold()
@@ -314,6 +321,21 @@ class Jira:
             return None
         try:
             return self.transition_to(job["issue"], self.start_status)
+        except TrackerError as e:
+            return str(e)
+
+    def on_rejected(self, job):
+        """Put an issue the factory started back in ready_status.
+
+        Only when it's still in start_status: if a person has moved it since,
+        that was their call. Returns None, or why the move failed.
+        """
+        if not (self.ready_status and self.start_status):
+            return None
+        try:
+            if self.status(job["issue"]).casefold() != self.start_status.casefold():
+                return None
+            return self.transition_to(job["issue"], self.ready_status)
         except TrackerError as e:
             return str(e)
 

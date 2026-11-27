@@ -411,6 +411,7 @@ def advance(job, stage):
         if job["pr"]:
             gh("pr", "close", str(job["pr"]))
             run(["git", "push", "origin", "--delete", job["branch"]], check=False)
+        tracker_step(job, "the issue wasn't moved back to its ready status", tracker().on_rejected)
 
     elif old == "intake":
         want = {"needs-info": "NEEDS-INFO", "rejected": "REJECT", "spec": "ACCEPT"}[stage]

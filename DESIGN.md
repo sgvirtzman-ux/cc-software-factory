@@ -63,7 +63,9 @@ using. GitHub Issues closes an issue through the PR's `Closes #n`. On Jira
 the factory walks the team's own workflow: it takes issues from
 `ready_status`, moves them to `start_status` when intake accepts, and to
 `merged_status` with a comment linking the PR when the PR merges, since a
-merged change usually goes to QA rather than straight to Done. Each hand-off
+merged change usually goes to QA rather than straight to Done. Rejecting a
+started job puts the issue back in `ready_status`, unless a person has moved
+it since. Each hand-off
 is one direct move, and a move the workflow refuses is a warning, not a
 failure: the job's state lives in `factory/jobs/`, not in Jira's status. Branches, PRs and merges stay
 on GitHub with `gh` either way. The Jira adapter uses the REST API v3 with
