@@ -5,7 +5,7 @@ what's generic, adapt what's repo-specific, verify it, and report. Work in the
 project's root. Don't clone this repository.
 
 The source is the folder the user pointed you at. On GitHub, read files from
-`https://github.com/sgvirtzman-ux/cc-software-factory/tree/main<path>`.
+`https://raw.githubusercontent.com/sgvirtzman-ux/cc-software-factory/main/<path>`.
 
 ## 0. Check the project
 
@@ -20,6 +20,13 @@ Stop and tell the user if any of these fail:
   library.
 - None of the files in step 1 already exist. If one does, show the user the
   clash and ask before overwriting.
+
+Warn the user, but carry on, if this one fails:
+
+- `agent-browser --version` works. The builder and the UX and UI reviewers use
+  the `agent-browser` CLI to look at pages. Without it they can't verify
+  anything visual, so a project with a UI needs it installed before its first
+  `ui` job. A project with no pages can skip it.
 
 ## 1. Copy
 
@@ -44,7 +51,7 @@ factory/dashboard.html
 ```
 
 ```bash
-SRC=https://raw.githubusercontent.com/sgvirtzman-ux/cc-software-factory/tree/main
+SRC=https://raw.githubusercontent.com/sgvirtzman-ux/cc-software-factory/main
 for f in <the paths above>; do
   mkdir -p "$(dirname "$f")" && curl -fsSL "$SRC/$f" -o "$f"
 done

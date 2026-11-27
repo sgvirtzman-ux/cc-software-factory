@@ -258,6 +258,9 @@ def prompt_text(line):
     return " ".join(b.get("text", "") for b in content if isinstance(b, dict))
 
 
+_unpriced = set()
+
+
 def cost_usd(job):
     """API-equivalent cost of every subagent whose prompt names this job's folder.
 
@@ -286,7 +289,12 @@ def cost_usd(job):
             if tokens == 0:
                 continue
             if model not in prices:
-                die(f"no price for model {model} in factory/config.json prices_usd_per_mtok")
+                # Don't let a missing price block state changes: warn and leave it out.
+                if model not in _unpriced:
+                    _unpriced.add(model)
+                    print(f"job: warning: no price for model {model} in factory/config.json "
+                          "prices_usd_per_mtok; its tokens are left out of cost_usd", file=sys.stderr)
+                continue
             p = prices[model]
             split = u.get("cache_creation") or {}
             write_1h = split.get("ephemeral_1h_input_tokens", 0)

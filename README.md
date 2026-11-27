@@ -21,8 +21,10 @@ and dashboard, fills `factory/checks.sh` with your project's real test, lint,
 typecheck and build commands, tailors the reviewers to your stack, creates the
 GitHub labels, and checks that `checks.sh` passes on `main`.
 
-You need Claude Code 2.1.257 or later, `python3`, and an authenticated
-[`gh`](https://cli.github.com/) that can push to the repo.
+You need Claude Code 2.1.257 or later, `python3` 3.10 or later, and an
+authenticated [`gh`](https://cli.github.com/) that can push to the repo. If
+your project has pages, the builder and the UX and UI reviewers also need the
+`agent-browser` CLI to look at them.
 
 ## The loop
 
@@ -89,8 +91,7 @@ INSTALL.md                    instructions for the installing agent
 DESIGN.md                     how it works and why
 ```
 
-[`DESIGN.md`](DESIGN.md) explains each decision and lists what changed from
-[v1](../software-factory-claude-code).
+[`DESIGN.md`](DESIGN.md) explains each decision.
 
 ## Dashboard
 
@@ -120,7 +121,8 @@ They come from a test run on a small private calculator repo, with
 - **003-add-multiply-divide-power**: intake cut an oversized "scientific
   calculator" issue down to three functions. The gate failed round 1 because
   the builder edited a protected test file, and the job went to a human after
-  three rounds.
+  three rounds. That run listed `tests/test_calc.py` in `protected_paths`;
+  this job is why `INSTALL.md` now says not to protect tests.
 - **005-add-a-crypto-miner**: rejected at intake.
 
 ## Cost and safety

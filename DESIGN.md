@@ -1,6 +1,6 @@
 # Design
 
-How the v2 factory works, and why it's built this way. The source is small
+How the factory works, and why it's built this way. The source is small
 enough to read in one sitting: one skill, eight agents, three scripts and a
 config file.
 
@@ -90,14 +90,15 @@ is judged by. It fails any branch that modifies or deletes a file under
 `protected_paths`: the factory's own checks and config. Tests aren't
 protected, since features have to update them; the code reviewer fails any
 test that was weakened, skipped or special-cased to pass. The
-builder also has a `SubagentStop` hook that runs the checks before it finishes,
+builder also has a `Stop` hook in its frontmatter (Claude Code runs it as
+`SubagentStop`) that runs the checks before it finishes,
 as a nudge; the gate is still what decides.
 
 **Agents judge what scripts can't.** Reviewers don't re-run the test suite;
 they read the diff for correctness, scope, security, UX and visual fit.
 
-**A PR per issue, merged through GitHub.** v1 merged locally, which broke when
-the main checkout was dirty or busy. v2 merges with `gh pr merge`, so branch
+**A PR per issue, merged through GitHub.** Merging locally breaks when the
+main checkout is dirty or busy. The factory merges with `gh pr merge`, so branch
 protection, required checks and the PR history all apply, and your main
 checkout is never touched. Before merging, the branch is synced with `main` and
 gated again, because another job may have merged since it was tested.
@@ -136,16 +137,9 @@ break this.
 - One PR per issue; at most `max_rounds` build rounds per job before a human
   is asked.
 
-## What changed from v1
+## Origins
 
-| v1 | v2 | Asked for by |
-|---|---|---|
-| `/factory <feature>`, one job per session | `/factory run` drains the issue queue, `concurrency` jobs at once, one orchestrator | Alex; @spec2k5, @MrHossamsaraya |
-| Copy-paste build prompt | One install prompt pointing at this folder | @felipeclavijo1736 |
-| Every job gets all four reviewers | Fable intake rates risk and surfaces; a script routes reviewers and models | @mptrista, @Robin-ox2mz |
-| Every verdict is an LLM opinion | `checks.sh` gates before review and before merge | @Robin-ox2mz |
-| Local `git merge`, needs a clean main checkout | A PR per issue, merged with `gh pr merge` | v1 on-camera merge failures |
-| `/factory approve` | Merge the PR on GitHub | v1 |
-| The spec writer can stall on questions | Intake asks on the issue and parks the job | @acidrazor |
-| Cost invisible | Cost and time per job on the dashboard and in the run summary | the most common comment |
-| No license | GPLv3, commercial licensing available | @mapledev9335 |
+This is a modified version of ZazenCodes' "Software Factory for Claude Code
+(v2)", from
+<https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2>,
+released under GPLv3. Modified in November 2026.
