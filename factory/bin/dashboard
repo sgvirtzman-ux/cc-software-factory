@@ -1,0 +1,75 @@
+#!/bin/sh
+''':'
+# Start with the first Python 3.10+ on PATH: python3, or python or py on Windows.
+for p in python3 python py; do
+  "$p" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && exec "$p" "$0" "$@"
+done
+echo "factory: needs Python 3.10 or later on PATH, as python3, python or py" >&2
+exit 1
+'''
+__doc__ = """Serve the factory's dashboard on this machine only.
+
+Usage: dashboard [--port N]
+
+Serves the factory/ folder at http://127.0.0.1:<port>/dashboard.html, with the
+port from config.json `dashboard_port` (default 8000). It binds to 127.0.0.1,
+so the job files (issue text, specs, reviews) never reach the network. If the
+dashboard already answers on that port, it prints the URL and exits; if
+something else holds the port, it says so and exits 1. Otherwise it serves
+until stopped. `/factory run` starts it in the background.
+"""
+
+import functools
+import http.server
+import json
+import sys
+import urllib.request
+from pathlib import Path
+
+FACTORY = Path(__file__).resolve().parents[1]
+CONFIG = json.loads((FACTORY / "config.json").read_text())
+TITLE = b"<title>Software Factory</title>"
+
+
+def already_serving(url):
+    """True when the factory's dashboard answers at url (no proxy for localhost)."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(url, timeout=2) as res:
+            return TITLE in res.read(4096)
+    except OSError:
+        return False
+
+
+class QuietHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass  # the board polls every 2s; don't fill the log
+
+
+def main(argv):
+    port = CONFIG.get("dashboard_port", 8000)
+    if argv[:1] == ["--port"] and len(argv) == 2 and argv[1].isdigit():
+        port = int(argv[1])
+    elif argv:
+        print(__doc__.strip(), file=sys.stderr)
+        sys.exit(2)
+    url = f"http://127.0.0.1:{port}/dashboard.html"
+    if already_serving(url):
+        print(f"dashboard: already running at {url}")
+        return
+    handler = functools.partial(QuietHandler, directory=str(FACTORY))
+    try:
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+    except OSError as e:
+        print(f"dashboard: port {port} is taken by something else ({e.strerror}); "
+              f"set dashboard_port in factory/config.json or pass --port", file=sys.stderr)
+        sys.exit(1)
+    print(f"dashboard: {url}", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

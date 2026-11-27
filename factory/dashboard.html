@@ -454,8 +454,8 @@ async function poll() {
 // be read, rather than show an empty board that looks like "no jobs".
 async function loadJobs() {
   if (location.protocol === 'file:') {
-    throw new Error('Opened as a file, so the board can\'t read jobs/. In the factory folder, run '
-      + '`python3 -m http.server` (`python -m http.server` on Windows), then open http://localhost:8000/dashboard.html')
+    throw new Error('Opened as a file, so the board can\'t read jobs/. Run factory/bin/dashboard '
+      + '(/factory run starts it) and open the address it prints, normally http://127.0.0.1:8000/dashboard.html')
   }
   const res = await fetch('jobs/', { cache: 'no-store' })
   if (res.status === 404) {

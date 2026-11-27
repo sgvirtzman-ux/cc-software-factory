@@ -62,6 +62,7 @@ through the scripts. `factory/jobs/` is runtime state.
 <root>/factory/bin/job                         the only writer of job.json
 <root>/factory/bin/gate                        runs checks.sh in a worktree → round-N/checks.md
 <root>/factory/bin/route                       risk + surfaces → the job's agents
+<root>/factory/bin/dashboard                   serves the board on 127.0.0.1 (dashboard_port)
 <root>/factory/lib/tracker.py                  the issue tracker: GitHub Issues or Jira
 <root>/factory/lib/codehost.py                 the code host: GitHub PRs or plain git
 <root>/factory/lib/workspace.py                one repo, or a workspace of several
@@ -187,6 +188,11 @@ job is merged, run `factory/bin/job merged <id>`.
 
 ## /factory run
 
+0. Start the dashboard: run `factory/bin/dashboard` with the Bash tool's
+   `run_in_background`. It serves the board on 127.0.0.1 only and prints its
+   URL, or says it's already running; tell the user the URL once. If it says
+   the port is taken, tell the user how to change `dashboard_port` and carry
+   on: the factory doesn't need the dashboard.
 1. Run `factory/bin/job queue`. Each line is `action  issue  job  stage  note`:
    `resume` (pick it up from its stage), `new` (no job yet), `hold` (no free
    slot), `wait` (needs the author or you) or `skip`. The script enforces
@@ -216,7 +222,8 @@ as `resume`: run `factory/bin/job advance <id> intake` and go to **intake**.
 
 ## /factory run <n>
 
-Run one issue with the same steps. If `factory/bin/job queue` shows a job for
+Run one issue with the same steps, starting the dashboard first as in step 0
+above. If `factory/bin/job queue` shows a job for
 it, resume that job; otherwise `factory/bin/job create <n>`. Finish with the
 summary line for that job.
 
