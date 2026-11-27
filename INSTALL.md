@@ -288,9 +288,25 @@ The last one is only used in git mode.
 
 ## 3. Verify
 
-1. In the project root, on the current branch, `bash factory/checks.sh` exits 0.
-   If it fails there, the factory can never pass a job: fix the
-   script (not the project) or tell the user what's broken.
+1. `factory/checks.sh` passes the way the gate will run it: in a fresh,
+   detached worktree of `origin/<base_branch>`, not in the user's checkout.
+   Their checkout may be on another branch or hold uncommitted work; never
+   switch, stash or reset it.
+
+   ```bash
+   root=$(pwd)
+   git fetch origin <base_branch>
+   git worktree add --detach .worktrees/_install-check origin/<base_branch>
+   (cd .worktrees/_install-check && bash "$root/factory/checks.sh")   # must exit 0
+   git worktree remove --force .worktrees/_install-check
+   ```
+
+   If it fails, the factory can never pass a job: fix the script (not the
+   project) or tell the user what's broken. A fresh checkout has no installed
+   packages or build output, so the script has to restore what it needs. When a
+   restore needs credentials this machine lacks (a private package feed, say),
+   or a test needs a database, secrets or a running service, stop and ask the
+   user. Never skip or weaken a check to get it passing.
 2. `factory/bin/job check-tracker` succeeds. It checks the tracker (on Jira,
    that the configured statuses exist) and the code host (on GitHub, the repo;
    in git mode, that `origin` has the base branch, and the `pr_url` link it
@@ -345,9 +361,12 @@ workspace's `.worktrees/<repo>/<job-id>`. Change the steps above like this:
 
 **0. Check.** Ask which of the clones the factory should build in; suggest the
 ones the issue tracker's work touches rather than all of them. For each one,
-check that it's a git repo, that its `origin` has its default branch
-(`git -C <repo> ls-remote --symref origin HEAD` names it), and that the user
-can push to it. The workspace folder itself must not be a git repo.
+check that it's a git repo and that the user can push to it, and find the
+branch jobs should start from. That's its `origin`'s default branch
+(`git -C <repo> ls-remote --symref origin HEAD` names it) unless the team
+branches from another one, often `dev`: ask, and check that the branch exists
+on `origin`. The workspace folder itself must not be a git repo. Don't switch
+branches or touch uncommitted work in any clone.
 
 **1. Copy.** Copy the same files into the workspace folder, except
 `factory/checks.sh`: make one checks script per repo instead, at
@@ -394,11 +413,21 @@ can push to it. The workspace folder itself must not be a git repo.
   `.worktrees/<repo>/<job-id>`.
 - **`.gitignore`**: skip it; the workspace isn't a repo.
 
-**3. Verify.** Instead of step 3.1, run each repo's checks script in that repo
-on its base branch, and fix any that fail:
-`cd <workspace>/<repo> && bash <workspace>/factory/checks/<repo>.sh`.
-`factory/bin/job check-tracker` checks every repo (its checkout, its checks
-script, its `origin` and its PR link). Skip step 3.5.
+**3. Verify.** Do step 3.1 for each repo, with its own base branch and checks
+script, from the workspace folder:
+
+```bash
+ws=$(pwd)
+git -C <repo> fetch origin <base>
+git -C <repo> worktree add --detach "$ws/.worktrees/<repo>/_install-check" origin/<base>
+(cd "$ws/.worktrees/<repo>/_install-check" && bash "$ws/factory/checks/<repo>.sh")   # must exit 0
+git -C <repo> worktree remove --force "$ws/.worktrees/<repo>/_install-check"
+```
+
+The same rules apply: never touch the user's checkouts, and stop and ask
+rather than weaken a check. `factory/bin/job check-tracker` checks every repo
+(its checkout, its checks script, its `origin` and its PR link). Skip step
+3.5.
 
 **4. Hand over.** There's nothing to commit or push. Tell the user to start
 Claude Code in the workspace folder and run `/factory` there; that the factory
