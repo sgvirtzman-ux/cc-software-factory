@@ -1,8 +1,8 @@
 # Design
 
-How the v2 factory works, and why it's built this way. The source is small
-enough to read in one sitting: one skill, eight agents, three scripts and a
-config file.
+How the factory works, and why it's built this way. The source is small
+enough to read in one sitting: one skill, eight agents, three scripts, a
+tracker module and a config file.
 
 ## The idea
 
@@ -18,7 +18,8 @@ skim a job on the dashboard and read the detail only where it matters.
 
 | Piece | File | Job |
 |---|---|---|
-| Queue | GitHub issues labeled `factory` | What to build. Anyone can file an issue; only people with triage or write access can label it. |
+| Queue | Issues labeled `factory`, in GitHub Issues or Jira Cloud | What to build. Anyone can file an issue; the label decides what runs. |
+| Tracker | `factory/lib/tracker.py` | The only code that talks to the issue tracker: the queue, issue text, comments, labels, and the hand-off after a merge. |
 | Orchestrator | `.claude/skills/factory/SKILL.md` | The session that runs `/factory`. Starts jobs, spawns agents, calls the scripts. Writes nothing itself. |
 | Agents | `.claude/agents/*.md` | One file per role. Each reads files, writes exactly one file, and replies with one line. |
 | State | `factory/jobs/<job-id>/` | `job.json` plus every agent's file. Gitignored, local to the machine running the factory. |
@@ -33,7 +34,7 @@ intake (fable)     → ACCEPT (scope possibly changed) | NEEDS-INFO | REJECT, po
 route (script)     → reviewers + models from risk/surfaces via config.json
 worktree           → factory/<job-id> from origin/main
 spec-writer (opus) → spec.md
-builder            → commits; first round pushes + opens draft PR "Closes #<n>"
+builder            → commits; first round pushes + opens draft PR linked to the issue
 gate (script)      → checks.sh; FAIL → builder gets the log, no reviewers spawned
 reviewers (routed) → parallel, WAIT FOR ALL; CHANGES → builder → gate → reviewers (max rounds)
 approver (opus)    → APPROVE: sync origin/main, gate, gh pr merge
@@ -51,6 +52,29 @@ The legal moves are in `TRANSITIONS` at the top of `factory/bin/job`.
 runs on your machine, on your Claude plan, when you start it. An issue can't
 start a Claude Code session by itself, and keeping it local means your
 worktrees, dev servers and dashboard are right there.
+
+**The tracker is pluggable; the code host isn't.** Issues can live in GitHub
+Issues or Jira Cloud, and `tracker` in `config.json` picks one. Everything the
+factory needs from a tracker is a handful of calls in `factory/lib/tracker.py`:
+list the queue, read an issue and its comments, comment, add and remove a
+label, file an issue, and hand an issue off after its PR merges. Both adapters
+return issues in one shape, so `factory/bin/job` doesn't know which it's
+using. GitHub Issues closes an issue through the PR's `Closes #n`. On Jira
+the factory walks the team's own workflow: it takes issues from
+`ready_status`, moves them to `start_status` when intake accepts, and to
+`merged_status` with a comment linking the PR when the PR merges, since a
+merged change usually goes to QA rather than straight to Done. Rejecting a
+started job puts the issue back in `ready_status`, unless a person has moved
+it since. Each hand-off
+is one direct move, and a move the workflow refuses is a warning, not a
+failure: the job's state lives in `factory/jobs/`, not in Jira's status. Branches, PRs and merges stay
+on GitHub with `gh` either way. The Jira adapter uses the REST API v3 with
+Python's standard library, so there's still nothing to install. Jira's rich
+text is Atlassian Document Format (ADF), so the adapter converts the Markdown
+subset the agents write (headings, lists, quotes, code, bold, links) to ADF and
+flattens ADF back to text for `issue.md`. Factory comments carry a comment
+property, Jira's version of GitHub's hidden `<!-- factory -->` marker, so a
+reply from the author can be told apart from the factory's own question.
 
 **One orchestrator for every job.** The session running `/factory run` starts up
 to `concurrency` jobs and spawns every agent as a background subagent. There
@@ -90,14 +114,15 @@ is judged by. It fails any branch that modifies or deletes a file under
 `protected_paths`: the factory's own checks and config. Tests aren't
 protected, since features have to update them; the code reviewer fails any
 test that was weakened, skipped or special-cased to pass. The
-builder also has a `SubagentStop` hook that runs the checks before it finishes,
+builder also has a `Stop` hook in its frontmatter (Claude Code runs it as
+`SubagentStop`) that runs the checks before it finishes,
 as a nudge; the gate is still what decides.
 
 **Agents judge what scripts can't.** Reviewers don't re-run the test suite;
 they read the diff for correctness, scope, security, UX and visual fit.
 
-**A PR per issue, merged through GitHub.** v1 merged locally, which broke when
-the main checkout was dirty or busy. v2 merges with `gh pr merge`, so branch
+**A PR per issue, merged through GitHub.** Merging locally breaks when the
+main checkout is dirty or busy. The factory merges with `gh pr merge`, so branch
 protection, required checks and the PR history all apply, and your main
 checkout is never touched. Before merging, the branch is synced with `main` and
 gated again, because another job may have merged since it was tested.
@@ -126,26 +151,22 @@ break this.
 
 ## Guardrails
 
-- Only issues labeled `factory` run. Labels need triage or write access, so the
-  label is the trust boundary.
+- Only issues labeled `factory` run, so the label is the trust boundary. On
+  GitHub, labels need triage or write access. On Jira, the Edit Issues
+  permission is enough to add one, so the boundary is only as tight as that
+  permission. A Jira workflow status that only a restricted group can move
+  issues into would be a tighter gate; it isn't built yet.
 - Issue text reaches agents as quoted data in `issue.md`, with comments only
-  from the issue's author and the factory's operator. It is never part of a
-  prompt. Intake, which reads it first, has no shell.
+  from the issue's author (the reporter, on Jira) and the factory's operator.
+  It is never part of a prompt. Intake, which reads it first, has no shell.
 - Agents push only `factory/*` branches. Only `factory/bin/job merge` merges,
   through `gh pr merge`. The factory never deploys.
 - One PR per issue; at most `max_rounds` build rounds per job before a human
   is asked.
 
-## What changed from v1
+## Origins
 
-| v1 | v2 | Asked for by |
-|---|---|---|
-| `/factory <feature>`, one job per session | `/factory run` drains the issue queue, `concurrency` jobs at once, one orchestrator | Alex; @spec2k5, @MrHossamsaraya |
-| Copy-paste build prompt | One install prompt pointing at this folder | @felipeclavijo1736 |
-| Every job gets all four reviewers | Fable intake rates risk and surfaces; a script routes reviewers and models | @mptrista, @Robin-ox2mz |
-| Every verdict is an LLM opinion | `checks.sh` gates before review and before merge | @Robin-ox2mz |
-| Local `git merge`, needs a clean main checkout | A PR per issue, merged with `gh pr merge` | v1 on-camera merge failures |
-| `/factory approve` | Merge the PR on GitHub | v1 |
-| The spec writer can stall on questions | Intake asks on the issue and parks the job | @acidrazor |
-| Cost invisible | Cost and time per job on the dashboard and in the run summary | the most common comment |
-| No license | GPLv3, commercial licensing available | @mapledev9335 |
+This is a modified version of ZazenCodes' "Software Factory for Claude Code
+(v2)", from
+<https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2>,
+released under GPLv3. Modified in November 2026.

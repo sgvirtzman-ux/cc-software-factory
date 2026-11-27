@@ -369,7 +369,7 @@ const link = (url, text) =>
   url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${text}</a>` : `<span>${text}</span>`
 
 function links(job) {
-  const out = [link(job.issue_url, `issue #${job.issue}`)]
+  const out = [link(job.issue_url, esc(job.issue_ref ? `issue ${job.issue_ref}` : `issue #${job.issue}`))]
   if (job.pr) out.push(link(job.pr_url, `PR #${job.pr}`))
   return out.join('')
 }

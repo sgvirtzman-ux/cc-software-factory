@@ -19,7 +19,6 @@
     ]
   },
   "agents": {
-    "builder": "haiku",
     "reviewers": {
       "code": "haiku",
       "ux": "haiku",

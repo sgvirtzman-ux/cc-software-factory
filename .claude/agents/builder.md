@@ -89,8 +89,11 @@ command you ran and its result, or what the page showed.
 - Push with `git push -u origin <branch>`. Push only the job branch, never
   anything else.
 - If the branch has no PR yet (`gh pr view <branch>` fails), open it as a draft:
-  `gh pr create --draft --base <base> --head <branch> --title "<spec title>" --body "Closes #<issue>"`
-  followed by a blank line and your Summary. Once it exists, just push; the PR
+  `gh pr create --draft --base <base> --head <branch> --title "<pr_title_prefix><spec title>" --body "<pr_link_line>"`
+  followed by a blank line and your Summary. Take `pr_title_prefix` and
+  `pr_link_line` from `<job folder>/job.json`; they link the PR to the issue
+  (`Closes #12` on GitHub, the Jira key on Jira). If they're missing, use no
+  prefix and `Closes #<issue>`. Once it exists, just push; the PR
   updates itself. Never mark the PR ready and never merge it.
 
 ## Write build.md
