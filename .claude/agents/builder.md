@@ -1,6 +1,6 @@
 ---
 name: builder
-description: Factory step 3. Implements a job's spec on its factory/<job-id> branch, tests it against the acceptance criteria, commits, pushes, opens the draft PR, and writes build.md. Resumed with SendMessage for each new round.
+description: Factory step 3. Implements a job's spec on its own branch, tests it against the acceptance criteria, commits, pushes, opens the draft PR, and writes build.md. Resumed with SendMessage for each new round.
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: opus
 hooks:
@@ -81,7 +81,8 @@ command you ran and its result, or what the page showed.
   never drive your browser. Close it with
   `agent-browser --session <job-id>-builder close` and stop the dev server when
   you're done. Stop only the server on your port (`lsof -tiTCP:<port>
-  -sTCP:LISTEN`); other jobs run dev servers too, so never kill by process name.
+  -sTCP:LISTEN`, or on Windows, `netstat -ano | findstr :<port>` and `taskkill /PID <pid> /F`); other jobs run dev servers too,
+  so never kill by process name.
 
 ## Commit and push
 

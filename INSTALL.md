@@ -49,8 +49,14 @@ Stop and tell the user if any of these fail:
 - With GitHub PRs or GitHub Issues: `gh auth status` shows a user who can push
   to the repo and manage its labels. In git mode with Jira, `gh` isn't needed.
 - `claude --version` is 2.1.257 or later (the intake agent runs on Fable).
-- `python3 --version` is 3.10 or later. The scripts use only the standard
-  library.
+- Python 3.10 or later is on PATH as `python3`, `python` or `py` (Windows
+  usually has only the last two). The scripts use only the standard library
+  and find whichever works themselves, so don't add a `python3` alias or shim.
+- On Windows: Claude Code runs commands in Git Bash, and so does the factory.
+  `git config --global core.longpaths` should print `true`. Worktrees nest
+  deep (`.worktrees/<repo>/<job-id>/...`), and Windows' 260-character path
+  limit otherwise makes `git worktree add` fail with "Filename too long". If
+  it isn't set, ask the user before setting it.
 - None of the files in step 1 already exist. If one does, show the user the
   clash and ask before overwriting.
 - For Jira: `JIRA_EMAIL` and `JIRA_API_TOKEN` are set in the environment
@@ -143,6 +149,12 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
   `https://<host>/<group>/<repo>/-/merge_requests/new?merge_request[source_branch]={branch}&merge_request[target_branch]={base}`.
   Show the user the link `factory/bin/job check-tracker` prints and ask them to
   open it once. Leave `pr_url` out and the hand-off names the branch instead.
+- `branch_format`: how job branches are named. The default is
+  `factory/{id}` (`factory/004-dark-mode`). If the team has a convention, ask
+  and match it, using `{id}` (the job id), `{issue}` (`12` or `PROJ-12`) and
+  `{slug}` (the title's first words): for example `dev_{issue}_{slug}` gives
+  `dev_PROJ-12_add-dark-mode-toggle`. Include `{id}` or `{issue}` so each job
+  gets its own branch.
 - `protected_paths`: keep the two factory entries and don't add the project's
   tests. Features legitimately change existing tests (a new required field
   changes every fixture), and a protected test blocks the job with no way
@@ -238,7 +250,7 @@ Then add a short section:
 `/factory run` builds every open issue labeled `factory` (in <GitHub Issues |
 the Jira project KEY>) through intake → spec → build → gate → review → approve,
 one branch and PR per issue (<the factory merges on GitHub | the team opens and
-merges the PR from the handed-off `factory/<job-id>` branch>). State is in
+merges the PR from the handed-off job branch>). State is in
 `factory/jobs/` (gitignored); `factory/bin/job` is its only writer. Checks:
 `factory/checks.sh`. Dashboard: `cd factory && python3 -m http.server`, then
 open http://localhost:8000/dashboard.html.
@@ -282,7 +294,8 @@ The last one is only used in git mode.
 2. `factory/bin/job check-tracker` succeeds. It checks the tracker (on Jira,
    that the configured statuses exist) and the code host (on GitHub, the repo;
    in git mode, that `origin` has the base branch, and the `pr_url` link it
-   would post). Then `factory/bin/job queue` runs without an error.
+   would post). Then `factory/bin/job queue` runs without an error. On
+   Windows this also proves the scripts start without a `python3` on PATH.
 3. Each file in `.claude/agents/` has only these frontmatter keys: `name`,
    `description`, `tools`, `model`, and `hooks` on the builder. Claude Code
    ignores unknown keys without a warning, so a typo silently changes behaviour.

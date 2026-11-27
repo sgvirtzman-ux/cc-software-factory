@@ -40,8 +40,8 @@ reviewers never drive your browser. Don't sign in or submit forms: the dev
 server may talk to real services. When you're done, run
 `agent-browser --session <job-id>-ux close` and stop the dev server. Stop only
 the server you started, by the PID listening on your port
-(`lsof -tiTCP:<port> -sTCP:LISTEN`); other jobs run dev servers too, so
-never kill by process name.
+(`lsof -tiTCP:<port> -sTCP:LISTEN`, or on Windows, `netstat -ano | findstr :<port>` and `taskkill /PID <pid> /F`); other jobs
+run dev servers too, so never kill by process name.
 
 ## What to look for
 

@@ -198,7 +198,8 @@ They come from a test run on a small private calculator repo, with
   write access can add labels. On Jira, anyone who can edit an issue can, so
   check who has the project's Edit Issues permission before you turn it on.
   Issue text reaches the agents as quoted data, never as their instructions.
-- The factory pushes only `factory/*` branches and never deploys. On GitHub it
+- The factory pushes only its jobs' own branches (`factory/<job-id>` unless
+  you set `branch_format`) and never deploys. On GitHub it
   merges only through `gh pr merge`; in git mode it never merges at all.
 
 ## License

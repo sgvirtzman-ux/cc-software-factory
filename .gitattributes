@@ -1,0 +1,4 @@
+# The factory's scripts must keep LF line endings, even in a Windows checkout:
+# a CRLF after `#!/bin/sh` or in a checks script breaks the shell.
+factory/bin/* text eol=lf
+*.sh text eol=lf
