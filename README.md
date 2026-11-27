@@ -159,10 +159,11 @@ pushes and syncing with `main` are plain git in both modes.
 ## Dashboard
 
 ```bash
-cd factory && python3 -m http.server
+cd factory && python3 -m http.server   # Windows: python -m http.server
 ```
 
-Open <http://localhost:8000/dashboard.html>. Each job is a card with its issue
+Open <http://localhost:8000/dashboard.html> through that server; opened
+straight from disk, the page can't read the jobs and says so. Each job is a card with its issue
 and PR, a row of gate and review chips per round, its risk, cost and
 time. Click a card to read every file the job wrote; each one opens with a
 short summary of what happened in that step. To see the example

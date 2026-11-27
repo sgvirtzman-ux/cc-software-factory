@@ -450,17 +450,30 @@ async function poll() {
   }
 }
 
-// factory/bin/job writes each jobs/<id>/job.json.
+// factory/bin/job writes each jobs/<id>/job.json. Say why when the folder can't
+// be read, rather than show an empty board that looks like "no jobs".
 async function loadJobs() {
-  let listing
-  try { listing = await fetchText('jobs/') } catch { return [] }
-  const doc = new DOMParser().parseFromString(listing, 'text/html')
+  if (location.protocol === 'file:') {
+    throw new Error('Opened as a file, so the board can\'t read jobs/. In the factory folder, run '
+      + '`python3 -m http.server` (`python -m http.server` on Windows), then open http://localhost:8000/dashboard.html')
+  }
+  const res = await fetch('jobs/', { cache: 'no-store' })
+  if (res.status === 404) {
+    throw new Error('No jobs/ folder next to this page: no job has started yet, or the server is '
+      + 'running in a different folder than the factory\'s')
+  }
+  if (!res.ok) throw new Error(`jobs/: HTTP ${res.status}`)
+  const doc = new DOMParser().parseFromString(await res.text(), 'text/html')
   const ids = [...doc.querySelectorAll('a')]
     .map((a) => decodeURIComponent(a.getAttribute('href')))
     .filter((h) => h.endsWith('/'))
     .map((h) => h.slice(0, -1))
     .sort()
-  return Promise.all(ids.map(async (id) => JSON.parse(await fetchText(`jobs/${id}/job.json`))))
+  // A job folder can exist for a moment before its job.json does; skip it until then.
+  const loaded = await Promise.all(ids.map(async (id) => {
+    try { return JSON.parse(await fetchText(`jobs/${id}/job.json`)) } catch { return null }
+  }))
+  return loaded.filter(Boolean)
 }
 
 // ---- Drawer --------------------------------------------------------------

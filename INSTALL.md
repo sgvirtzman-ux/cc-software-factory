@@ -252,7 +252,7 @@ the Jira project KEY>) through intake → spec → build → gate → review →
 one branch and PR per issue (<the factory merges on GitHub | the team opens and
 merges the PR from the handed-off job branch>). State is in
 `factory/jobs/` (gitignored); `factory/bin/job` is its only writer. Checks:
-`factory/checks.sh`. Dashboard: `cd factory && python3 -m http.server`, then
+`factory/checks.sh`. Dashboard: `cd factory && python3 -m http.server` (`python` on Windows), then
 open http://localhost:8000/dashboard.html.
 
 Each job works in its own git worktree, a full checkout of the repo at
