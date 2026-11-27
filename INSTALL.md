@@ -89,6 +89,7 @@ factory/checks.sh
 factory/bin/job
 factory/bin/gate
 factory/bin/route
+factory/bin/dashboard
 factory/lib/tracker.py
 factory/lib/codehost.py
 factory/lib/workspace.py
@@ -100,7 +101,7 @@ SRC=https://raw.githubusercontent.com/sgvirtzman-ux/cc-software-factory/main
 for f in <the paths above>; do
   mkdir -p "$(dirname "$f")" && curl -fsSL "$SRC/$f" -o "$f"
 done
-chmod +x factory/checks.sh factory/bin/job factory/bin/gate factory/bin/route
+chmod +x factory/checks.sh factory/bin/job factory/bin/gate factory/bin/route factory/bin/dashboard
 ```
 
 Don't copy `README.md`, `DESIGN.md`, `INSTALL.md`, `LICENSE`, `examples/` or
@@ -162,6 +163,8 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
   Add a path only when no job should ever change it. They are fnmatch
   patterns, so `*` also matches `/`.
 - `ports`: move `base` if the project already uses ports 5100–5199.
+- `dashboard_port`: move it from 8000 if something on this machine already
+  uses that port.
 - `tracker`: leave `{ "type": "github" }` for GitHub Issues. For Jira, replace
   it with:
 
@@ -252,8 +255,8 @@ the Jira project KEY>) through intake → spec → build → gate → review →
 one branch and PR per issue (<the factory merges on GitHub | the team opens and
 merges the PR from the handed-off job branch>). State is in
 `factory/jobs/` (gitignored); `factory/bin/job` is its only writer. Checks:
-`factory/checks.sh`. Dashboard: `cd factory && python3 -m http.server`, then
-open http://localhost:8000/dashboard.html.
+`factory/checks.sh`. Dashboard: `/factory run` starts it (`factory/bin/dashboard`
+by hand), serving on 127.0.0.1 only; open http://127.0.0.1:8000/dashboard.html.
 
 Each job works in its own git worktree, a full checkout of the repo at
 `.worktrees/<job-id>` (gitignored). A tool run from the repo root that doesn't

@@ -95,6 +95,7 @@ factory/
   bin/job                     the only writer of job.json; refuses illegal moves; merges
   bin/gate                    runs checks.sh in a job's worktree → round-N/checks.md
   bin/route                   risk + surfaces → the job's reviewers and models
+  bin/dashboard               serves dashboard.html on 127.0.0.1; /factory run starts it
   lib/tracker.py              GitHub Issues or Jira Cloud: the queue, comments, labels
   lib/codehost.py             GitHub PRs or plain git: how a job's change reaches main
   lib/workspace.py            one repo, or a workspace of several: where each job builds
@@ -158,11 +159,16 @@ pushes and syncing with `main` are plain git in both modes.
 
 ## Dashboard
 
+`/factory run` starts it for you and prints the address, normally
+<http://127.0.0.1:8000/dashboard.html>. To start it yourself:
+
 ```bash
-cd factory && python3 -m http.server
+factory/bin/dashboard
 ```
 
-Open <http://localhost:8000/dashboard.html>. Each job is a card with its issue
+It serves the `factory/` folder on 127.0.0.1 only, so job files never reach
+your network; `dashboard_port` in `config.json` changes the port. Opened
+straight from disk, the page can't read the jobs and says so. Each job is a card with its issue
 and PR, a row of gate and review chips per round, its risk, cost and
 time. Click a card to read every file the job wrote; each one opens with a
 short summary of what happened in that step. To see the example
