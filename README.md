@@ -1,4 +1,4 @@
-# Software Factory for Claude Code (v2)
+# Software Factory for Claude Code
 
 A software factory that works through your GitHub issues. Label an issue
 `factory`, run `/factory run`, and agents decide whether it's worth building,
@@ -13,7 +13,7 @@ Open Claude Code in your project and paste:
 ```text
 Install this software factory in this project from the reference repository:
 
-https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2
+https://github.com/sgvirtzman-ux/cc-software-factory/tree/main
 ```
 
 Your agent reads [`INSTALL.md`](INSTALL.md), copies the skill, agents, scripts
@@ -62,24 +62,6 @@ One Claude Code session orchestrates every job, `concurrency` at a time
 You approve by merging the PR on GitHub. To change an escalated PR, tell the
 factory what you want with `/factory`. To drop a job that waits on you or on
 its author, tell the factory to reject it.
-
-## The guide
-
-This folder is the companion to **A Developer's Guide to Software Factories**,
-a short PDF on how factories like this one work and how to run yours. I'll send
-you a copy when you [sign up to my newsletter](https://zazencodes.com/newsletter?utm_source=github&utm_medium=referral&utm_campaign=software-factory-claude-code-v2).
-
-<p align="center">
-  <a href="https://zazencodes.com/newsletter?utm_source=github&utm_medium=referral&utm_campaign=software-factory-claude-code-v2">
-    <img
-      src="docs/assets/software-factories-guide-promo.png"
-      alt="Software Factories — a developer's guide to issue-driven pipelines for coding agents"
-      width="100%"
-    >
-  </a>
-  <br>
-  <a href="https://zazencodes.com/newsletter?utm_source=github&utm_medium=referral&utm_campaign=software-factory-claude-code-v2">Get the free PDF</a>
-</p>
 
 ## What's in here
 
@@ -153,28 +135,7 @@ They come from a test run on a small private calculator repo, with
 - The factory pushes only `factory/*` branches, merges only through
   `gh pr merge`, and never deploys.
 
-## More from ZazenCodes
-
-- **Agentic Coding Fundamentals**, the full course:
-  <https://zazencodes.com/courses/agentic-coding-fundamentals>
-- **Newsletter**, one email a week: <https://zazencodes.com/newsletter>
-- **YouTube**: <https://youtube.com/@ZazenCodes>
-
 ## License
 
 [GPLv3](LICENSE). You can use, modify and share this code, and any version you
 distribute must also be released under GPLv3.
-
-Want to use this in closed-source or commercial software? Get in touch for a commercial license.
-
-<p align="center">
-  <a href="https://zazencodes.com/?utm_source=github&utm_medium=referral&utm_campaign=software-factory-claude-code-v2">
-    <img
-      src="docs/assets/zazencodes-banner.png"
-      alt="ZazenCodes — Engineering for the Agentic Era"
-      width="100%"
-    >
-  </a>
-  <br>
-  Created by <a href="https://zazencodes.com/">ZazenCodes</a>
-</p>
