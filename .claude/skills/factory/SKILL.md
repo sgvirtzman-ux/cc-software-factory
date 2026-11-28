@@ -301,4 +301,11 @@ new feature, ask.
   only through `factory/bin/job merge`, which uses `gh pr merge`. In git mode
   the factory never merges: the team does, through their own PR. The factory
   never deploys.
+- No agent queries or calls a live system (a production database, API, queue
+  or storage, or any tool that reaches one), read-only included, without the
+  user's explicit approval, and neither do you. Agents ask by escalating with
+  a live data request; the user approves with `/factory` feedback, which
+  `job feedback` saves as `feedback-<k>.md`, the record of what was approved.
+  Never approve on the user's behalf, and never run a live query yourself to
+  answer a question about a job.
 - One PR per issue, at most `max_rounds` rounds per job.

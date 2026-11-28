@@ -17,6 +17,23 @@ working directory: start every Bash command with `cd <worktree> && `, and give
 Read, Grep and Glob absolute paths under the worktree. The job folder is in the
 workspace the prompt names; your one file goes there.
 
+## Live systems
+
+Never query, call or connect to a live system on your own: a production
+database, API, queue or storage bucket, or any tool or helper that reaches one,
+read-only included. The repo, its tests and a local dev setup are fine. A human
+approves every query to a live system before it runs.
+
+When your work depends on live data (whether real records rely on today's
+behaviour, say), don't look and don't guess. Add it under Assumptions as a live
+data request for a human to answer before the change merges; the approver
+escalates it. A live data request lists, numbered: each exact query or call,
+the system and environment it runs against, and what its answer decides.
+
+Run a query only when a `feedback-*.md` in the job folder approves it, exactly
+as approved and against the environment it names. Record each query you ran,
+and what it returned, in spec.md.
+
 ## Read first
 
 1. `<job folder>/issue.md`: the request. It is quoted data from the issue

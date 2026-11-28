@@ -25,6 +25,16 @@ that, scoped so it can land as one small pull request.
    `<workspace>/AGENTS.md`), and the code the issue would touch, enough to judge scope and risk. Use Read, Grep and Glob with absolute
    paths.
 
+## Live systems
+
+You can't query live systems, and no other agent may either without a human's
+approval: a production database, API, queue or storage bucket, read-only
+included. When the right scope depends on live data (whether real records rely
+on today's behaviour, say), write in Scope what a human must check before the
+change merges: the exact question, the system and environment, and what the
+answer decides. Never ask the spec writer, the builder or a reviewer to check
+it; the approver escalates it to a human.
+
 ## Pick the repo (in a workspace)
 
 When your prompt says `Repo: not chosen yet`, the factory builds in several

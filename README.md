@@ -209,6 +209,9 @@ They come from a test run on a small private calculator repo, with
 - The factory pushes only its jobs' own branches (`factory/<job-id>` unless
   you set `branch_format`) and never deploys. On GitHub it
   merges only through `gh pr merge`; in git mode it never merges at all.
+- Agents never query or call a live system (a production database, API,
+  queue), even read-only, until you approve the exact queries. A job that
+  needs live data stops and asks.
 
 ## License
 

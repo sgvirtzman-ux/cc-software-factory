@@ -179,7 +179,7 @@ check("ACCEPT from Open: warns, issue stays Open, job still advances",
       r.stderr)
 
 # Rejecting a started job puts the ticket back in Sprint Ready.
-def to_needs_human(key, summary):
+def to_needs_human(key, summary, blocked="Needs a decision."):
     I[key] = {"summary": summary, "labels": ["factory"], "status": "Sprint Ready", "description": desc, "comments": []}
     jid = run("create", key).stdout.strip()
     d = repo / "factory/jobs" / jid
@@ -188,10 +188,19 @@ def to_needs_human(key, summary):
     run("advance", jid, "spec")
     (d / "spec.md").write_text("# spec\n")
     run("advance", jid, "build")
-    (d / "build.md").write_text("STATUS: BLOCKED\n\n## Blocked\nNeeds a decision.\n")
+    (d / "build.md").write_text(f"STATUS: BLOCKED\n\n## Blocked\n{blocked}\n\n## Log\nRound 1.\n")
     run("advance", jid, "needs-human")
     return jid
 j6 = to_needs_human("PROJ-6", "Started then rejected")
+# A builder that needs live data stops with a request; it must reach the human whole.
+REQUEST = ("The fix changes which live rules match.\n\n### Live data request\n"
+           "1. `SELECT id, codes FROM rules WHERE active = 1` on the production rules database: "
+           "which active rules rely on the old match.")
+j11 = to_needs_human("PROJ-11", "Needs live data", blocked=REQUEST)
+posted = json.dumps(I["PROJ-11"]["comments"][-1]["body"], ensure_ascii=False)
+check("live data request: the whole request reaches the ticket, query included",
+      "Live data request" in posted and "SELECT id, codes FROM rules WHERE active = 1" in posted
+      and "which active rules rely on the old match" in posted and "Round 1." not in posted, posted)
 check("needs-human: ticket still In Progress, labeled", I["PROJ-6"]["status"] == "In Progress"
       and "factory:needs-human" in I["PROJ-6"]["labels"], (I["PROJ-6"]["status"], I["PROJ-6"]["labels"]))
 r = run("reject", j6, stdin="Doing it by hand.\n")

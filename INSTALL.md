@@ -258,7 +258,14 @@ if neither exists). Every agent reads it. Make sure it says:
 
 - how to set up a fresh checkout (install dependencies, env files to copy);
 - how to start the dev server on a given port, if the project has one;
-- the validation commands, matching `factory/checks.sh`.
+- the validation commands, matching `factory/checks.sh`;
+- the live systems (production databases, APIs, queues, storage) and any
+  tool or helper that reaches them. Agents never query one without the user's
+  approval; this tells them what counts. For each such tool, also add an `ask`
+  permission rule to `.claude/settings.json`, so Claude Code asks the user
+  before every call, even one an agent makes against its instructions:
+  `{"permissions": {"ask": ["Bash(<the tool's command>:*)"]}}`. Ask the user
+  which tools those are; don't guess.
 
 Then add a short section:
 

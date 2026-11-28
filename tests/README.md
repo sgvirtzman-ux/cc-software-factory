@@ -19,7 +19,7 @@ python3 tests/test_workspace.py       # one suite, with each check printed
 
 | Suite | Covers |
 | --- | --- |
-| `test_jira.py` | Jira tracker: queue, intake comments, reply detection, labels, ready → start → merged moves, rejects, new issues, ADF; non-ASCII issue text through Windows-style cp1252 pipes; a failed `create` leaves no job folder |
+| `test_jira.py` | Jira tracker: queue, intake comments, reply detection, labels, ready → start → merged moves, rejects, new issues, ADF; non-ASCII issue text through Windows-style cp1252 pipes; a failed `create` leaves no job folder; a builder's live data request reaches the ticket whole |
 | `test_codehost.py` | Git mode (handoff; no-ff, rebase and squash merges) and GitHub mode (draft PR, escalate, merge) |
 | `test_workspace.py` | Workspace mode: several repos, intake's `REPO`, label override, `branch_format`, CRLF checks scripts |
 | `test_windows.py` | Python launcher, msvcrt locking, Git Bash vs WSL, all simulated |
