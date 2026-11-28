@@ -122,7 +122,7 @@ repos into, and it builds in all of them from one session:
   code; a `factory:<repo>` label on the issue overrides it. A job builds in one
   repo; an issue that spans repos is cut to its main repo, and intake's comment
   names what's left elsewhere.
-- Worktrees live in the workspace's `.worktrees/<repo>/`, so nothing is
+- Worktrees live in the workspace's `.worktrees/<repo>/<job-number>`, so nothing is
   installed into, committed to or changed in any repo. Jobs in different repos
   run side by side up to `concurrency`.
 

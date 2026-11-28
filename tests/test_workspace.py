@@ -96,7 +96,9 @@ accept(j1, "repo-b")
 job("advance", j1, "spec")
 s = st(j1)
 check("REPO: repo-b → job placed in repo-b, worktree under the workspace",
-      s["repo"] == "repo-b" and s["worktree"] == str(wsroot / ".worktrees/repo-b" / j1) and (Path(s["worktree"]) / "B.md").exists(), s)
+      s["repo"] == "repo-b" and s["worktree"] == str(wsroot / ".worktrees/repo-b/001") and (Path(s["worktree"]) / "B.md").exists(), s)
+check("worktree is named after the job number; job folder and branch keep the full id",
+      j1 == "001-change-b" and Path(s["worktree"]).name == "001" and jd(j1).is_dir() and s["branch"] == "dev_PROJ-1_change-b", (j1, s))
 r = job("header", j1)
 check("header after ACCEPT: repo, worktree, branch, base",
       f"Repo: repo-b at {wsroot / 'repo-b'}. Worktree: {s['worktree']}. Branch: {s['branch']}. Base: origin/main." in r.stdout, r.stdout)

@@ -51,7 +51,7 @@ build → gate → review pass. `factory/bin/job advance` sends the job to
 `factory/`. It is either the repo the factory builds, or a workspace: a folder
 of several repo clones listed under `repos` in `config.json`. In a workspace
 each job builds in one repo, which intake picks (or a `factory:<repo>` label
-fixes), and the job's worktree lives in `<root>/.worktrees/<repo>/`. The repos'
+fixes), and the job's worktree lives in `<root>/.worktrees/<repo>/<job-number>`. The repos'
 own checkouts stay the user's: you and the agents never change them except
 through the scripts. `factory/jobs/` is runtime state.
 

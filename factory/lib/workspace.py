@@ -8,8 +8,11 @@ Workspace (`repos` in config.json): the factory lives in a folder that holds
 several clones side by side, and builds in any of them. Each job targets one
 repo, which intake picks (or a `factory:<repo>` label fixes). Each repo has
 its own base branch, code host and checks (`factory/checks/<repo>.sh`), and
-its worktrees go in the workspace's `.worktrees/<repo>/<job-id>`, outside the
-repo, so no repo needs to know the factory exists.
+its worktrees go in the workspace's `.worktrees/<repo>/<job-number>`, outside
+the repo, so no repo needs to know the factory exists. A worktree is named
+after the job's number (`003`), not its full id: Windows' 260-character path
+limit counts the whole path, and a repo's build output can nest deep enough
+under a long title's slug to cross it.
 
 Settings at the top level of config.json (`base_branch`, `codehost`,
 `merge_method`) are the defaults each repo can override.
@@ -26,7 +29,8 @@ class WorkspaceError(Exception):
 
 
 class Repo:
-    def __init__(self, name, path, base, codehost, merge_method, protected_paths, checks, worktrees, description=""):
+    def __init__(self, name, path, base, codehost, merge_method, protected_paths, checks, worktrees, description="",
+                 short_worktrees=False):
         self.name = name
         self.path = Path(path)
         self.base = base
@@ -36,9 +40,12 @@ class Repo:
         self.checks = Path(checks)
         self.worktrees = Path(worktrees)
         self.description = description
+        self.short_worktrees = short_worktrees
 
     def worktree(self, job_id):
-        return self.worktrees / job_id
+        """`003-dark-mode-toggle` → `.worktrees/003-dark-mode-toggle`, or
+        `.worktrees/<repo>/003` in a workspace (see the module docstring)."""
+        return self.worktrees / (job_id.split("-", 1)[0] if self.short_worktrees else job_id)
 
 
 class Workspace:
@@ -69,7 +76,8 @@ class Workspace:
                 protected_paths=r.get("protected_paths", []),
                 checks=self.root / r.get("checks", f"factory/checks/{name}.sh"),
                 worktrees=self.root / ".worktrees" / name,
-                description=r.get("description", ""))
+                description=r.get("description", ""),
+                short_worktrees=True)
         if not self.repos:
             raise WorkspaceError("config.json repos is empty")
 

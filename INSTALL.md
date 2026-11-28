@@ -60,9 +60,17 @@ Stop and tell the user if any of these fail:
   would run in WSL, set `"bash"` in `factory/config.json` to the full path of
   Git's `bash.exe` (usually `C:/Program Files/Git/bin/bash.exe`).
   `git config --global core.longpaths` should print `true`. Worktrees nest
-  deep (`.worktrees/<repo>/<job-id>/...`), and Windows' 260-character path
-  limit otherwise makes `git worktree add` fail with "Filename too long". If
-  it isn't set, ask the user before setting it.
+  deep (`.worktrees/<job-id>/...`, or `.worktrees/<repo>/<job-number>/...` in
+  a workspace), and Windows' 260-character path limit otherwise makes
+  `git worktree add` fail with "Filename too long". If it isn't set, ask the
+  user before setting it.
+  That only covers git. Build tools (MSBuild, npm, ...) need Windows' own
+  long-path support: `reg query HKLM\SYSTEM\CurrentControlSet\Control\FileSystem /v LongPathsEnabled`
+  should print `0x1`. If it prints `0x0`, tell the user: a deep build output
+  path can then fail the checks with a misleading "could not find file"
+  error. Turning it on needs an administrator (on a managed machine, their IT
+  team, often through the "Enable Win32 long paths" group policy) and
+  sometimes a reboot. Don't change it yourself.
 - None of the files in step 1 already exist. If one does, show the user the
   clash and ask before overwriting.
 - For Jira: `JIRA_EMAIL` and `JIRA_API_TOKEN` are set in the environment
@@ -369,7 +377,7 @@ with `orders/`, `billing/` and `web/` in it. The factory lives in that folder,
 beside the repos and not inside any of them, so installing it changes no repo
 and needs no commit or push. Each job builds in one repo: intake picks it, or a
 `factory:<repo>` label on the issue fixes it. Its worktree goes in the
-workspace's `.worktrees/<repo>/<job-id>`. Change the steps above like this:
+workspace's `.worktrees/<repo>/<job-number>`. Change the steps above like this:
 
 **0. Check.** Ask which of the clones the factory should build in; suggest the
 ones the issue tracker's work touches rather than all of them. For each one,
@@ -422,7 +430,7 @@ branches or touch uncommitted work in any clone.
   given port, and run the commands in its checks script. Every agent reads this
   file as well as the repo's own. Then add the **Software factory** section,
   saying it builds the listed repos and that worktrees live in
-  `.worktrees/<repo>/<job-id>`.
+  `.worktrees/<repo>/<job-number>`.
 - **`.gitignore`**: skip it; the workspace isn't a repo.
 
 **3. Verify.** Do step 3.1 for each repo, with its own base branch and checks
