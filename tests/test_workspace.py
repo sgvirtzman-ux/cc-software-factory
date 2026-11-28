@@ -1,6 +1,6 @@
 """Workspace mode: one factory beside several repos, each with its own remote and
 checks; intake's REPO, the label override, branch_format, CRLF checks, a full
-job in git mode with Jira."""
+job in git mode with Jira, and splitting an issue that spans repos into tickets."""
 import json, os, shutil, subprocess, sys
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -172,6 +172,87 @@ check("invalid branch name from branch_format: clear error", r.returncode == 1 a
 cfg2 = dict(cfg, tracker={"type": "github"}); (wsroot / "factory/config.json").write_text(json.dumps(cfg2))
 r = job("check-tracker", ok=False)
 check("GitHub Issues in a workspace without tracker.repo: clear error", r.returncode == 1 and "tracker.repo" in r.stderr, r.stderr)
+(wsroot / "factory/config.json").write_text(json.dumps(cfg, indent=2))
+
+# An issue that spans repos: intake's `## Other repos` becomes one ticket per repo.
+cfg4 = dict(cfg, concurrency=10); (wsroot / "factory/config.json").write_text(json.dumps(cfg4, indent=2))
+fj.STATE["next"] = 100; fj.STATE["links"] = []
+fj.STATE["create_status"] = "Grooming Ready"  # new tickets land here; it moves straight to Sprint Ready
+def accept_split(jid, repo, other):
+    (jd(jid) / "intake.md").write_text(f"DECISION: ACCEPT\nRISK: low\nSURFACES: none\nRESCOPED: yes\nREPO: {repo}\n\n"
+                                       f"## Summary\n- ok\n\n## Scope\nThe API part.\n\n## Other repos\n{other}")
+    route(jid)
+ticket(20, "Export orders as CSV")
+j20 = job("create", "PROJ-20").stdout.strip()
+accept_split(j20, "repo-a", "### repo-z: Nope\nSomething.\n")
+r = job("advance", j20, "spec", ok=False)
+check("split: an unknown repo in Other repos is refused, listing the repos",
+      r.returncode != 0 and "Other repos names repo-z" in r.stderr and "repo-a, repo-b, repo-c" in r.stderr, r.stderr)
+accept_split(j20, "repo-a", "### repo-a: Same repo\nSomething.\n")
+r = job("advance", j20, "spec", ok=False)
+check("split: the job's own repo in Other repos is refused", r.returncode != 0 and "the repo this job builds in" in r.stderr, r.stderr)
+accept_split(j20, "repo-a", "### repo-b: Empty\n")
+r = job("advance", j20, "spec", ok=False)
+check("split: a part with no scope is refused", r.returncode != 0 and "repo-b has no scope" in r.stderr, r.stderr)
+check("split refusals filed nothing and left the issue alone",
+      "PROJ-100" not in I and not I["PROJ-20"]["comments"] and st(j20)["stage"] == "intake")
+accept_split(j20, "repo-a", "### repo-b: Add a CSV button to the orders page\nA button that downloads the export.\n\n"
+                            "### `repo-c`: Email the CSV export nightly\nWAITS: yes\nA nightly job that mails the file.\n")
+r = job("advance", j20, "spec")
+s20 = st(j20)
+check("split: the job itself still builds in repo-a", s20["stage"] == "spec" and s20["repo"] == "repo-a" and "warning" not in r.stderr, r.stderr)
+check("split: one ticket per other repo, with intake's titles",
+      I.get("PROJ-100", {}).get("summary") == "Add a CSV button to the orders page"
+      and I.get("PROJ-101", {}).get("summary") == "Email the CSV export nightly", {k: I[k]["summary"] for k in I if k >= "PROJ-100"})
+check("split: an independent part is queued and fixed to its repo", sorted(I["PROJ-100"]["labels"]) == ["factory", "factory:repo-b"], I["PROJ-100"]["labels"])
+check("split: a part that waits isn't queued yet", I["PROJ-101"]["labels"] == ["factory:repo-c"], I["PROJ-101"]["labels"])
+check("split: the queued ticket moves to ready_status; the waiting one stays put",
+      I["PROJ-100"]["status"] == "Sprint Ready" and I["PROJ-101"]["status"] == "Grooming Ready",
+      (I["PROJ-100"]["status"], I["PROJ-101"]["status"]))
+d100 = adf_to_text(I["PROJ-100"]["description"])
+check("split: the ticket names its parent, its scope and the original request",
+      "Split from PROJ-20" in d100 and "`repo-b`" in d100 and "A button that downloads the export." in d100
+      and "## Original request" in d100 and "WAITS" not in adf_to_text(I["PROJ-101"]["description"]), d100)
+check("split: each ticket is linked to the parent in Jira",
+      fj.STATE["links"] == [("Relates", "PROJ-100", "PROJ-20"), ("Relates", "PROJ-101", "PROJ-20")], fj.STATE["links"])
+c = adf_to_text(I["PROJ-20"]["comments"][-1]["body"])
+check("split: the parent's issue lists the new tickets",
+      "split into other repos" in c and "`repo-b`: PROJ-100" in c and "`repo-c`: PROJ-101 (queued once this ticket merges)" in c, c)
+check("split: job.json records the tickets",
+      [(x["repo"], x["issue"], x["queued"]) for x in s20["split_issues"]] == [("repo-b", "PROJ-100", True), ("repo-c", "PROJ-101", False)], s20)
+r = job("queue")
+check("split: the queued ticket shows up as new work; the waiting one doesn't",
+      "new\tPROJ-100" in r.stdout and "PROJ-101" not in r.stdout, r.stdout)
+
+j100 = job("create", "PROJ-100").stdout.strip()
+md = (jd(j100) / "issue.md").read_text()
+check("split ticket's job knows its parent and its repo", st(j100)["split_from"] == "PROJ-20"
+      and "fixed to `repo-b`" in md and "Leave `## Other repos` out" in md, md)
+accept_split(j100, "repo-b", "### repo-a: Back again\nThe API part, again.\n")
+job("advance", j100, "spec")
+check("a split ticket's job never splits again", "PROJ-102" not in I and not st(j100).get("split_issues")
+      and st(j100)["repo"] == "repo-b", st(j100))
+
+job("merged", j20)
+check("parent merged: the waiting ticket joins the queue", "factory" in I["PROJ-101"]["labels"]
+      and "PROJ-20 merged" in adf_to_text(I["PROJ-101"]["comments"][-1]["body"]) and st(j20)["split_issues"][1]["queued"]
+      and I["PROJ-101"]["status"] == "Sprint Ready", I["PROJ-101"])
+
+# Filing problems never block the job: they're warnings, and named on the issue.
+cfg5 = dict(cfg4, tracker=dict(cfg["tracker"], link_type="Nope")); (wsroot / "factory/config.json").write_text(json.dumps(cfg5, indent=2))
+ticket(21, "Spans three repos")
+j21 = job("create", "PROJ-21").stdout.strip()
+accept_split(j21, "repo-c", "### repo-a: Part A\nA.\n\n### repo-b: Part B\nB.\n")
+fj.STATE["faults"] = [{"method": "POST", "path": "/rest/api/3/issue", "skip": 0}]
+fj.STATE["create_status"] = "Open"  # a workflow where Open can't jump to Sprint Ready
+r = job("advance", j21, "spec")
+c = adf_to_text(I["PROJ-21"]["comments"][-1]["body"])
+check("split: a failed create, a bad link type and a blocked move are warnings; the job goes on",
+      st(j21)["stage"] == "spec" and "no ticket filed for repo-a" in r.stderr and "wasn't linked" in r.stderr
+      and "tracker.link_type" in r.stderr and "move it to Sprint Ready by hand" in r.stderr, r.stderr)
+check("split: the issue says which part to file by hand",
+      "`repo-a`: couldn't be filed, so file it by hand" in c and "`repo-b`: PROJ-102" in c
+      and [x["repo"] for x in st(j21)["split_issues"]] == ["repo-b"], c)
 (wsroot / "factory/config.json").write_text(json.dumps(cfg, indent=2))
 
 srv.shutdown()

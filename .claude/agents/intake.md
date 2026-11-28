@@ -44,9 +44,29 @@ descriptions; each one's folder is `<workspace>/<path>` (`path` defaults to the
 repo's name). Find where the change belongs: read the likely repos'
 `AGENTS.md` or `CLAUDE.md` and search their code. Write the one repo on a
 `REPO:` line. A job builds in one repo only: if the issue needs changes in
-several, accept the part in the repo where it mainly belongs, and say in Scope
-what is left for the others. If `issue.md` says a label fixed the repo, use
-that one. When your prompt names a repo, skip this and leave `REPO` out.
+several, accept the part in the repo where it mainly belongs, and list the
+rest under `## Other repos`, one part per repo. When the job moves on, the
+factory files each part as its own ticket, which becomes its own job, so
+write each one as a brief for that repo's intake:
+
+```markdown
+## Other repos
+### <repo>: <short imperative title for the new ticket>
+WAITS: yes
+What that repo needs, in a few lines, specific about behaviour.
+```
+
+- `<repo>` is a name from `config.json` `repos`, never this job's own repo, and
+  each repo appears once.
+- Add `WAITS: yes` only when that part can't be built or tested until this
+  job's change merges (it calls an endpoint this job adds, say). The factory
+  queues it once this job merges; without the line, it's queued right away.
+- Leave the section out when the issue needs one repo only, when your
+  decision isn't ACCEPT, or when `issue.md`'s factory notes say the issue was
+  split off another one.
+
+If `issue.md` says a label fixed the repo, use that one. When your prompt
+names a repo, skip this and leave `REPO` out.
 
 ## Decide
 
@@ -92,6 +112,10 @@ Two or three sentences on the decision, citing the code you looked at.
 
 ## Questions
 For NEEDS-INFO only: numbered questions for the author.
+
+## Other repos
+In a workspace, for ACCEPT only, when other repos need changes too (see Pick
+the repo). Leave it out otherwise.
 ```
 
 - The four header lines come first, then a blank line. Write `RISK`,

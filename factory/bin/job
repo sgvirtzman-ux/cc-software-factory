@@ -23,7 +23,8 @@ job (config.json `repos`, factory/lib/workspace.py).
 Usage:
   job queue                      what /factory run should do with each labeled issue
   job create <issue>             new job for an open `factory` issue; prints the job id
-  job advance <job> <stage>      move a job to <stage>, or refuse
+  job advance <job> <stage>      move a job to <stage>, or refuse; in a workspace, intake → spec
+                                 also files a ticket for each repo in intake.md's `## Other repos`
   job merge <job>                APPROVE → sync with the base branch, gate, then merge the PR
                                  (github) or push the branch and hand it to the team (git)
   job merged <job>               mark a handed-off job merged by hand (a squash merge git can't see)
@@ -312,10 +313,15 @@ def write_issue_md(job):
         for c in comments:
             who = "factory" if c["factory"] else f"@{c['author']['name']}"
             lines += ["", f"### {who}, {c['created']}", "", quote(c["body"])]
+    notes = []
     if job["repo_label"]:
-        lines += ["", "## Factory notes", "",
-                  f"The repo is fixed to `{job['repo_label']}` by the issue's "
-                  f"`{LABELS['queue']}:{job['repo_label']}` label."]
+        notes.append(f"The repo is fixed to `{job['repo_label']}` by the issue's "
+                     f"`{LABELS['queue']}:{job['repo_label']}` label.")
+    if job.get("split_from"):
+        notes.append(f"The factory filed this issue for the part of {job['split_from']} that belongs in its repo; "
+                     f"{job['split_from']}'s own job builds the rest. Leave `## Other repos` out of intake.md.")
+    if notes:
+        lines += ["", "## Factory notes", "", "\n\n".join(notes)]
     (job_dir(job["id"]) / "issue.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return issue
 
@@ -471,6 +477,90 @@ def check_reviews_done(job):
     require(not bad, f"first line isn't a verdict in review-{bad[0]}.md" if bad else "")
 
 
+SPLIT_HEAD = re.compile(r"^`?([A-Za-z0-9][A-Za-z0-9._-]*)`?\s*(?::\s*(.*))?$")
+
+
+def other_repos(job):
+    """intake.md's `## Other repos`: [{"repo", "title", "scope", "waits"}], checked against config.json.
+
+    Each part is a `### <repo>: <title>` heading, an optional `WAITS: yes` line
+    (the part can't be built until this job merges), then its scope.
+    """
+    body = section(job_dir(job["id"]) / "intake.md", "Other repos")
+    if not body or job.get("split_from"):
+        return []
+    parts, seen = [], set()
+    for chunk in re.split(r"^### ", body, flags=re.M)[1:]:
+        head, _, rest = chunk.partition("\n")
+        m = SPLIT_HEAD.match(head.strip())
+        require(m, f"intake.md ## Other repos: {head.strip()!r} isn't `### <repo>: <title>`")
+        name, title = m.group(1), (m.group(2) or "").strip()
+        require(name in ws().repos, f"intake.md ## Other repos names {name}, which isn't one of: {', '.join(ws().repos)}")
+        require(name != job["repo"], f"intake.md ## Other repos names {name}, the repo this job builds in")
+        require(name not in seen, f"intake.md ## Other repos names {name} twice")
+        seen.add(name)
+        rest = rest.strip()
+        waits = re.match(r"^WAITS:\s*(yes|no)\s*(?:\n|$)", rest, re.I)
+        if waits:
+            rest = rest[waits.end():].strip()
+        require(rest, f"intake.md ## Other repos: {name} has no scope")
+        parts.append({"repo": name, "title": title or f"{job['title']} ({name})", "scope": rest,
+                      "waits": bool(waits) and waits.group(1).lower() == "yes"})
+    return parts
+
+
+def file_splits(job, parts):
+    """File one ticket per other repo, labeled `<queue>:<repo>`, and `<queue>` too
+    unless it waits for this job to merge. Never blocks the job: a ticket that
+    can't be filed is named on the issue and printed as a warning."""
+    t = tracker()
+    original = section(job_dir(job["id"]) / "issue.md", "Body") or "> (empty)"
+    job["split_issues"] = job.get("split_issues") or []
+    filed, failed = [], []
+    for part in parts:
+        when = (f"It waits for {issue_ref(job)} to merge; the factory adds the `{LABELS['queue']}` label then."
+                if part["waits"] else "")
+        body = (f"Split from {issue_ref(job)} ({job['issue_url']}) by the factory. That ticket's job builds "
+                f"the part in `{job['repo']}`; this one covers the part in `{part['repo']}`. {when}".strip()
+                + f"\n\n## Scope\n\n{part['scope']}\n\n## Original request\n\n{original}")
+        labels = [f"{LABELS['queue']}:{part['repo']}"] + ([] if part["waits"] else [LABELS["queue"]])
+        try:
+            new = t.create(part["title"], body, labels)
+        except trackers.TrackerError as e:
+            failed.append((part, str(e)))
+            continue
+        job["split_issues"].append({"repo": part["repo"], "issue": new, "ref": t.ref(new),
+                                    "waits": part["waits"], "queued": not part["waits"]})
+        filed.append((part, t.ref(new)))
+        tracker_step(job, f"{t.ref(new)} wasn't linked", lambda j: t.relate(new, j["issue"]))
+        if not part["waits"]:
+            tracker_step(job, f"{t.ref(new)} isn't ready for the queue", lambda j: t.make_ready(new))
+    lines = ["### Factory: split into other repos", "",
+             f"This ticket's job builds in `{job['repo']}`. The work intake found for other repos is filed "
+             "as its own ticket, one per repo:", ""]
+    for part, ref in filed:
+        lines.append(f"- `{part['repo']}`: {ref}" + (" (queued once this ticket merges)" if part["waits"] else ""))
+    for part, why in failed:
+        lines.append(f"- `{part['repo']}`: couldn't be filed, so file it by hand ({why})")
+        print(f"job: warning: {job['id']}: no ticket filed for {part['repo']}: {why}", file=sys.stderr)
+    tracker_step(job, "the split wasn't noted on the issue", lambda j: t.comment(j["issue"], "\n".join(lines)))
+
+
+def queue_waiting_splits(job):
+    """Once a job merges, add the queue label to the tickets that waited for it."""
+    for split in job.get("split_issues") or []:
+        if split["queued"]:
+            continue
+
+        def release(j, split=split):
+            tracker().add_label(split["issue"], LABELS["queue"])
+            split["queued"] = True
+            tracker().comment(split["issue"], f"### Factory: ready to build\n\n{issue_ref(j)} merged, "
+                                              f"so this ticket joins the factory's queue.")
+            return tracker().make_ready(split["issue"])
+        tracker_step(job, f"{split['ref']} wasn't queued", release)
+
+
 def next_round(job):
     job["round"] += 1
     round_dir(job).mkdir(exist_ok=True)
@@ -497,6 +587,7 @@ def advance(job, stage, force=False):
         how = h.merged_how(job) if (job["pr"] or h.kind == "git") else "Marked merged by hand."
         # The merge stands either way; a tracker hiccup is only a warning.
         tracker_step(job, "the issue wasn't updated after the merge", lambda j: tracker().on_merged(j, how))
+        queue_waiting_splits(job)
         if h.kind == "git":
             run(["git", "push", "origin", "--delete", job["branch"]], cwd=repo_of(job).path, check=False)
 
@@ -517,6 +608,7 @@ def advance(job, stage, force=False):
             require(job["agents"], "route the job first: factory/bin/route " + job["id"])
             i = job["intake"]
             repo_note = ""
+            splits = []
             if ws().multi:
                 name = job.get("repo_label") or i.get("repo")
                 require(name, "intake.md has no REPO: line, and no repo label fixes one")
@@ -524,6 +616,7 @@ def advance(job, stage, force=False):
                 job["repo"] = name
                 job["worktree"] = posix(ws().get(name).worktree(job["id"]))
                 repo_note = f", repo: {name}"
+                splits = other_repos(job)
             title += f" (risk {i['risk']}, surfaces: {', '.join(i['surfaces']) or 'none'}{repo_note})"
         tracker().comment(job["issue"], f"{title}\n\n{intake_body()}")
         if stage == "needs-info":
@@ -536,6 +629,8 @@ def advance(job, stage, force=False):
             run(["git", "fetch", "origin", repo.base], cwd=repo.path)
             Path(job["worktree"]).parent.mkdir(parents=True, exist_ok=True)
             run(["git", "worktree", "add", "-b", job["branch"], job["worktree"], f"origin/{repo.base}"], cwd=repo.path)
+            if splits:
+                file_splits(job, splits)
 
     elif old == "needs-info":
         require_slot(job["id"])
@@ -720,6 +815,9 @@ def cmd_create(arg):
         "intake": None, "agents": None, "gate": None, "reviews": {},
         "cost_usd": 0.0, "started": now(), "ended": None,
     }
+    parent = next((j for j in all_jobs() for x in j.get("split_issues") or [] if x["issue"] == issue_id), None)
+    if parent:
+        job["split_from"] = issue_ref(parent)
     try:
         write_issue_md(job)
         save(job)
@@ -885,7 +983,7 @@ def cmd_comment(job, text):
 def cmd_new_issue(title, body):
     if not title.strip() or not body.strip():
         die("usage: job new-issue <title>, with the body on stdin")
-    print(tracker().ref(tracker().create(title.strip(), body.strip(), LABELS["queue"])))
+    print(tracker().ref(tracker().create(title.strip(), body.strip(), [LABELS["queue"]])))
 
 
 def cmd_check_tracker():

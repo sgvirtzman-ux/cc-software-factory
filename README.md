@@ -120,8 +120,11 @@ repos into, and it builds in all of them from one session:
   (`factory/checks/<repo>.sh`).
 - Intake picks the repo for each issue by reading the descriptions and the
   code; a `factory:<repo>` label on the issue overrides it. A job builds in one
-  repo; an issue that spans repos is cut to its main repo, and intake's comment
-  names what's left elsewhere.
+  repo. When an issue spans repos, intake keeps the main repo's part, and the
+  factory files a ticket for each other repo, labeled `factory:<repo>` and
+  linked to the original. Each ticket becomes its own job. A part that depends
+  on the first job's change gets the `factory` label only once that job
+  merges.
 - Worktrees live in the workspace's `.worktrees/<repo>/<job-number>`, so nothing is
   installed into, committed to or changed in any repo. Jobs in different repos
   run side by side up to `concurrency`.

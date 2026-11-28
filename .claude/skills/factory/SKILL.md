@@ -121,9 +121,11 @@ decision:
 - `ACCEPT`: run `factory/bin/route <id>`, then `factory/bin/job advance <id> spec`
   (in a workspace it places the job in intake's `REPO`, or the label's; then it
   comments on the issue, moves a Jira issue to its in-progress status, and
-  creates the worktree). Go to **spec**. If it prints a warning, pass it on to
-  the user and carry on. If it refuses because `REPO` is missing or isn't a
-  configured repo, resume intake once with the refusal.
+  creates the worktree; in a workspace it also files a ticket for each repo
+  under intake's `## Other repos`, which the queue picks up as new work). Go to
+  **spec**. If it prints a warning, pass it on to the user and carry on. If it
+  refuses because `REPO` or `## Other repos` names a repo that's missing or
+  isn't a configured repo, resume intake once with the refusal.
 - `NEEDS-INFO`: `factory/bin/job advance <id> needs-info`. The job parks until
   the author replies.
 - `REJECT`: `factory/bin/job advance <id> rejected`.

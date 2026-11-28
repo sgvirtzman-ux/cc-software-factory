@@ -21,7 +21,7 @@ python3 tests/test_workspace.py       # one suite, with each check printed
 | --- | --- |
 | `test_jira.py` | Jira tracker: queue, intake comments, reply detection, labels, ready → start → merged moves, rejects, new issues, ADF; non-ASCII issue text through Windows-style cp1252 pipes; a failed `create` leaves no job folder; a builder's live data request reaches the ticket whole |
 | `test_codehost.py` | Git mode (handoff; no-ff, rebase and squash merges) and GitHub mode (draft PR, escalate, merge) |
-| `test_workspace.py` | Workspace mode: several repos, intake's `REPO`, label override, `branch_format`, CRLF checks scripts |
+| `test_workspace.py` | Workspace mode: several repos, intake's `REPO`, label override, `branch_format`, CRLF checks scripts; an issue that spans repos filed as one linked ticket per other repo, `WAITS: yes` queued on merge, no re-splitting, filing failures as warnings |
 | `test_windows.py` | Python launcher, msvcrt locking, Git Bash vs WSL, all simulated |
 | `test_dashboard.py` | `factory/bin/dashboard`: localhost only, already running, port taken |
 | `test_github.py` | Regression: the GitHub Issues + PRs setup behaves exactly as at a git ref (default `HEAD`) |

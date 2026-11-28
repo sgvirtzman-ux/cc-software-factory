@@ -112,9 +112,18 @@ push a repo's build output past Windows' 260-character path limit. Each repo's c
 no branch can edit the checks it's judged by. The agents are told their
 worktree, repo and base in every prompt's header, which `job header` prints,
 so they work the same in either layout. One repo per job keeps state, the gate
-and merge detection simple. An issue that spans repos is cut to its main repo
-and the rest is named, which is what intake already does with any issue too
-big for one PR.
+and merge detection simple. An issue that spans repos is cut to its main repo,
+which is what intake already does with any issue too big for one PR. The rest
+isn't left as a note for someone to act on: intake writes a brief per other
+repo under `## Other repos`, and when the job is accepted, `job advance` files
+each brief as its own ticket, labeled `factory:<repo>` so its intake doesn't
+have to guess the repo. Each ticket then runs as an ordinary job. That keeps one repo per job
+and still sees the whole issue built. A brief marked `WAITS: yes` (it needs
+the first job's change merged before it can be built) is filed without the
+`factory` label, and the merge adds it. A split ticket's job never splits
+again, so two repos can't keep handing work back and forth. Filing is best effort:
+a ticket that can't be filed is a warning and a line on the issue, never a
+reason to stop the job that's already accepted.
 
 **One orchestrator for every job.** The session running `/factory run` starts up
 to `concurrency` jobs and spawns every agent as a background subagent. There

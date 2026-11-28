@@ -32,7 +32,7 @@ if args[:2] == ["issue", "edit"]:
     save(); sys.exit(0)
 if args[:2] == ["issue", "create"]:
     n = str(max(int(k) for k in S["issues"]) + 1)
-    S["issues"][n] = {"title": flag("--title"), "body": flag("--body"), "author": "operator", "labels": [flag("--label")], "state": "OPEN", "comments": []}
+    S["issues"][n] = {"title": flag("--title"), "body": flag("--body"), "author": "operator", "labels": [args[k + 1] for k, a in enumerate(args) if a == "--label"], "state": "OPEN", "comments": []}
     save(); print(f"https://github.com/o/r/issues/{n}"); sys.exit(0)
 PRS = S.setdefault("prs", {})
 if args[:2] == ["pr", "list"]:

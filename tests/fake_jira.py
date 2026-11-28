@@ -84,7 +84,7 @@ class H(BaseHTTPRequestHandler):
         # STATE["faults"]: {"method", "prefix", "skip"} fails the request after
         # `skip` matching ones with a 500, once, to test the factory's recovery.
         for f in STATE.get("faults", []):
-            if f["method"] == method and path.startswith(f["prefix"]):
+            if f["method"] == method and (path == f["path"] if "path" in f else path.startswith(f["prefix"])):
                 if f["skip"]:
                     f["skip"] -= 1
                     break
@@ -113,8 +113,14 @@ class H(BaseHTTPRequestHandler):
         if path == "/rest/api/3/issue" and method == "POST":
             f = body["fields"]; validate_adf(f["description"])
             key = f"{f['project']['key']}-{STATE['next']}"; STATE["next"] += 1
-            I[key] = {"summary": f["summary"], "labels": f["labels"], "status": "Open", "description": f["description"], "comments": []}
+            I[key] = {"summary": f["summary"], "labels": f["labels"], "status": STATE.get("create_status", "Open"), "description": f["description"], "comments": []}
             return self.send(201, {"key": key})
+        if path == "/rest/api/3/issueLink" and method == "POST":
+            if body["type"]["name"] not in {"Relates", "Blocks"}:
+                return self.send(404, {"errorMessages": [f"No issue link type with name '{body['type']['name']}' found."]})
+            assert body["inwardIssue"]["key"] in I and body["outwardIssue"]["key"] in I, "unknown issue"
+            STATE.setdefault("links", []).append((body["type"]["name"], body["inwardIssue"]["key"], body["outwardIssue"]["key"]))
+            return self.send(201)
         m = re.match(r"^/rest/api/3/project/(\w+)/statuses$", path)
         if m:
             return self.send(200, [{"name": "Task", "statuses": [{"name": s} for s in CATEGORY]}])

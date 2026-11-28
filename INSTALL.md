@@ -217,7 +217,12 @@ It must be non-interactive, must not rewrite files (no `--fix`, no
   `merged_status`. Without `start_status` the issue stays put until the merge.
   For any other queue, set `queue_jql` to the full query; it replaces the
   default, and it must still match issues in `start_status`, or the factory
-  loses track of its own jobs. Keep the default labels: Jira accepts the colons
+  loses track of its own jobs. In a workspace, the factory files a ticket for
+  each other repo an issue needs, links it to the original with the
+  `link_type` link (default `"Relates"`; set it if the site renamed that type),
+  and moves it to `ready_status` so the queue sees it. That move must be
+  allowed directly from the project's initial status; if it isn't, the factory
+  warns and someone moves the ticket by hand. Keep the default labels: Jira accepts the colons
   in `factory:needs-info`.
 - Leave `concurrency`, `max_rounds`, `routing`, `surface_reviewers` and
   `prices_usd_per_mtok` as they are unless the user asks.
@@ -432,7 +437,10 @@ branches or touch uncommitted work in any clone.
   defaults to none in a workspace, since the factory's own files live outside
   every repo; set it per repo only for paths no job should ever change.
 - With GitHub Issues as the tracker, set `"tracker": {"type": "github",
-  "repo": "<owner>/<name>"}` to say whose issues to read. Jira needs nothing
+  "repo": "<owner>/<name>"}` to say whose issues to read, and create a
+  `factory:<repo>` label for each repo (`gh label create factory:<repo>
+  --repo <owner>/<name>`): the factory puts one on every ticket it files for
+  another repo, and GitHub won't file an issue with a label that doesn't exist. Jira needs nothing
   extra. Don't use per-repo queue labels: one factory takes every `factory`
   issue and places it.
 - **Jira credentials** go in the workspace's `.claude/settings.local.json`.
@@ -466,4 +474,4 @@ rather than weaken a check. `factory/bin/job check-tracker` checks every repo
 Claude Code in the workspace folder and run `/factory` there; that the factory
 picks the repo per issue, and a `factory:<repo>` label fixes it; and that a
 job builds in one repo, so an issue that spans repos is cut down to its main
-repo, with the rest named in intake's comment.
+repo, and the factory files a ticket for each other repo, each its own job.

@@ -108,9 +108,18 @@ class GitHub:
     def remove_labels(self, issue_id, labels):
         self._gh("issue", "edit", str(issue_id), "--remove-label", ",".join(labels))
 
-    def create(self, title, body, label):
-        url = self._gh("issue", "create", "--label", label, "--title", title, "--body", body).strip()
+    def create(self, title, body, labels):
+        flags = [a for label in labels for a in ("--label", label)]
+        url = self._gh("issue", "create", *flags, "--title", title, "--body", body).strip()
         return int(url.rstrip("/").rsplit("/", 1)[1])
+
+    def relate(self, issue_id, other_id):
+        """The new issue's body names #other, and GitHub links the two from that."""
+        return None
+
+    def make_ready(self, issue_id):
+        """GitHub's queue is the label alone."""
+        return None
 
     def on_started(self, job):
         """GitHub issues have no workflow status to move."""
@@ -165,6 +174,7 @@ class Jira:
         self.site = tracker["site"].rstrip("/")
         self.project = tracker["project"]
         self.issue_type = tracker.get("issue_type", "Task")
+        self.link_type = tracker.get("link_type", "Relates")
         self.merged_status = tracker["merged_status"]
         self.ready_status = tracker.get("ready_status")
         self.start_status = tracker.get("start_status")
@@ -300,11 +310,21 @@ class Jira:
     def remove_labels(self, key, labels):
         self._req("PUT", self._issue_path(key), body={"update": {"labels": [{"remove": l} for l in labels]}})
 
-    def create(self, title, body, label):
+    def create(self, title, body, labels):
         res = self._req("POST", "/rest/api/3/issue", body={"fields": {
-            "project": {"key": self.project}, "summary": title, "description": md_to_adf(body),
-            "issuetype": {"name": self.issue_type}, "labels": [label]}})
+            "project": {"key": self.project}, "summary": title[:255], "description": md_to_adf(body),
+            "issuetype": {"name": self.issue_type}, "labels": list(labels)}})
         return res["key"]
+
+    def relate(self, key, other):
+        """Link two issues with link_type (default Relates). Returns None, or why it couldn't."""
+        try:
+            self._req("POST", "/rest/api/3/issueLink", body={
+                "type": {"name": self.link_type}, "inwardIssue": {"key": key}, "outwardIssue": {"key": other}})
+        except TrackerError as e:
+            return f"couldn't link {key} to {other} ({self.link_type!r}; set tracker.link_type to a link type "\
+                   f"this site has): {e}"
+        return None
 
     def status(self, key):
         issue = self._req("GET", self._issue_path(key), query={"fields": "status"})
@@ -322,6 +342,17 @@ class Jira:
             return f"no transition to {status!r} from its current status (available: {names})"
         self._req("POST", self._issue_path(key, "/transitions"), body={"transition": {"id": match[0]["id"]}})
         return None
+
+    def make_ready(self, key):
+        """Move an issue the factory filed to ready_status, if one is set, so the
+        queue sees it. Returns None, or why it couldn't."""
+        if not self.ready_status:
+            return None
+        try:
+            why = self.transition_to(key, self.ready_status)
+        except TrackerError as e:
+            why = str(e)
+        return why and f"move it to {self.ready_status} by hand for the factory to pick it up: {why}"
 
     def on_started(self, job):
         """Move the issue to start_status, if one is set, once intake accepts it.
