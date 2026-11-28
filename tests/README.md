@@ -19,7 +19,7 @@ python3 tests/test_workspace.py       # one suite, with each check printed
 
 | Suite | Covers |
 | --- | --- |
-| `test_jira.py` | Jira tracker: queue, intake comments, reply detection, labels, ready → start → merged moves, rejects, new issues, ADF |
+| `test_jira.py` | Jira tracker: queue, intake comments, reply detection, labels, ready → start → merged moves, rejects, new issues, ADF; non-ASCII issue text through Windows-style cp1252 pipes; a failed `create` leaves no job folder |
 | `test_codehost.py` | Git mode (handoff; no-ff, rebase and squash merges) and GitHub mode (draft PR, escalate, merge) |
 | `test_workspace.py` | Workspace mode: several repos, intake's `REPO`, label override, `branch_format`, CRLF checks scripts |
 | `test_windows.py` | Python launcher, msvcrt locking, Git Bash vs WSL, all simulated |
@@ -29,3 +29,9 @@ python3 tests/test_workspace.py       # one suite, with each check printed
 Before committing a change to `factory/`, run `python3 tests/run_all.py`: every
 suite must pass and the regression must report "all the same". A deliberate
 behaviour change shows as a DIFF; say so in the PR.
+
+Every factory process the suites start runs with `EncodingWarning` as an error
+(`STRICT_ENCODING` in `support.py`), so a file read or write, or a text-mode
+subprocess, that doesn't name its encoding fails the run. Windows defaults to
+cp1252, which can't hold issue text like "→"; name `encoding="utf-8"` (and
+`errors="replace"` for command output) every time.

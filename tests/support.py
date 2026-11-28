@@ -19,6 +19,11 @@ FAKE_BIN = TESTS / "bin"
 
 sys.dont_write_bytecode = True  # importing factory/lib here must not write __pycache__ into the repo
 BASE_ENV = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+# Every file read, write and text-mode subprocess in the factory must name its
+# encoding: Windows defaults to cp1252, which can't hold issue text like "→".
+# Python 3.10+ flags an implicit one with EncodingWarning; make that fatal.
+STRICT_ENCODING = {"PYTHONWARNDEFAULTENCODING": "1", "PYTHONWARNINGS": "error::EncodingWarning"}
+BASE_ENV.update(STRICT_ENCODING)
 
 
 def workdir(name):

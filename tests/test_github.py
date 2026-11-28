@@ -9,7 +9,10 @@ Usage: python3 tests/test_github.py [<ref>]
 import json, os, shutil, subprocess, sys
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from support import BASE_ENV, FAKE_BIN, REPO, workdir
+from support import BASE_ENV, FAKE_BIN, REPO, STRICT_ENCODING, workdir
+# The old scripts at the ref may predate explicit encodings; compare behaviour,
+# not encoding hygiene (the other suites enforce that).
+BASE_ENV = {k: v for k, v in BASE_ENV.items() if k not in STRICT_ENCODING}
 
 SRC = REPO
 BASE_REF = sys.argv[1] if len(sys.argv) > 1 else "HEAD"

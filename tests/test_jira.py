@@ -212,6 +212,42 @@ check("reject needs-info job: never started, stays Sprint Ready", I["PROJ-8"]["s
       and "warning" not in r.stderr, (I["PROJ-8"]["status"], r.stderr))
 
 # Missing credentials fail clearly.
+# Text Windows' default encoding (cp1252) can't hold, through pipes set up the
+# way Windows sets them (PYTHONIOENCODING=cp1252 gives stdin/stdout cp1252).
+TEXT = "parse_code \u2192 first letter only, \u201cquoted\u201d, \u2713, \u4e2d\u6587"
+adf = lambda t: {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": t}]}]}
+win = dict(env, PYTHONIOENCODING="cp1252")
+def run_win(*args, stdin=None):
+    r = subprocess.run([job, *args], input=stdin.encode() if stdin else None, capture_output=True, env=win)
+    return r.returncode, r.stdout.decode(), r.stderr.decode()
+I["PROJ-9"] = {"summary": "Fix \u2192 item codes", "labels": ["factory"], "status": "Sprint Ready", "description": adf(TEXT), "comments": []}
+code, out, err = run_win("queue")
+check("unicode: queue prints a title with \u2192 through cp1252 pipes", code == 0 and "Fix \u2192 item codes" in out, out + err)
+before = len(fj.LOG)
+code, out, err = run_win("create", "PROJ-9")
+j9 = out.strip()
+check("unicode: create succeeds", code == 0 and j9.endswith("-fix-item-codes"), out + err)
+md = (repo / "factory/jobs" / j9 / "issue.md").read_text(encoding="utf-8")
+check("unicode: issue.md keeps the title and body intact, as UTF-8", "Fix \u2192 item codes" in md and TEXT in md, md)
+issue_gets = sum(1 for m, p, _ in fj.LOG[before:] if m == "GET" and p.startswith("/rest/api/3/issue/PROJ-9"))
+(repo / "factory/jobs" / j9 / "intake.md").write_text(f"DECISION: NEEDS-INFO\nRISK: low\nSURFACES: none\nRESCOPED: no\n\n## Summary\n- {TEXT}\n\n## Questions\n1. Keep \u201cA\u201d?\n", encoding="utf-8")
+code, out, err = run_win("advance", j9, "needs-info")
+posted = json.dumps(I["PROJ-9"]["comments"][-1]["body"], ensure_ascii=False) if I["PROJ-9"]["comments"] else ""
+check("unicode: intake comment reaches Jira intact", code == 0 and TEXT in posted and "\u201cA\u201d" in posted, out + err + posted)
+code, out, err = run_win("comment", j9, stdin=f"Note: {TEXT}\n")
+posted = json.dumps(I["PROJ-9"]["comments"][-1]["body"], ensure_ascii=False)
+check("unicode: a comment read from stdin reaches Jira intact", code == 0 and TEXT in posted, out + err + posted)
+
+# A create that fails half way leaves no job folder behind, so it can be rerun.
+I["PROJ-10"] = {"summary": "Flaky fetch", "labels": ["factory"], "status": "Sprint Ready", "description": adf("x"), "comments": []}
+folders = set((repo / "factory/jobs").iterdir())
+fj.STATE["faults"] = [{"method": "GET", "prefix": "/rest/api/3/issue/PROJ-10", "skip": issue_gets - 1}]
+r = run("create", "PROJ-10", ok=False)
+check("failed create: an error, and no job folder left", r.returncode != 0 and set((repo / "factory/jobs").iterdir()) == folders
+      and not fj.STATE["faults"], (r.stderr, sorted(p.name for p in set((repo / "factory/jobs").iterdir()) - folders)))
+r = run("create", "PROJ-10", ok=False)
+check("failed create: running it again works", r.returncode == 0 and (repo / "factory/jobs" / r.stdout.strip() / "job.json").exists(), r.stderr)
+
 r = subprocess.run([job, "queue"], capture_output=True, text=True,
                    env={k: v for k, v in env.items() if k not in ("JIRA_API_TOKEN",)})
 check("missing token: clear error", r.returncode == 1 and "set JIRA_EMAIL and JIRA_API_TOKEN" in r.stderr, r.stderr)
