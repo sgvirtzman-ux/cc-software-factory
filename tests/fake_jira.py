@@ -81,6 +81,15 @@ class H(BaseHTTPRequestHandler):
         u = urlparse(self.path); q = parse_qs(u.query); path = u.path
         body = self.body() if method in {"POST", "PUT"} else None
         LOG.append((method, path, body))
+        # STATE["faults"]: {"method", "prefix", "skip"} fails the request after
+        # `skip` matching ones with a 500, once, to test the factory's recovery.
+        for f in STATE.get("faults", []):
+            if f["method"] == method and path.startswith(f["prefix"]):
+                if f["skip"]:
+                    f["skip"] -= 1
+                    break
+                STATE["faults"].remove(f)
+                return self.send(500, {"errorMessages": ["injected failure"]})
         try:
             return self.handle_route(method, path, q, body)
         except AssertionError as e:

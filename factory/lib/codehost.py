@@ -34,7 +34,7 @@ def load(repo):
 
 
 def _run(cmd, cwd, check=True):
-    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if check and res.returncode != 0:
         raise HostError(f"`{' '.join(cmd)}` failed: {(res.stderr or res.stdout).strip()}")
     return res

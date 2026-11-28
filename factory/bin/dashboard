@@ -26,8 +26,14 @@ import sys
 import urllib.request
 from pathlib import Path
 
+# Windows gives pipes its ANSI code page (cp1252), which can't hold most of
+# Unicode; issue text, agent output and check logs can. Speak UTF-8 instead.
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    if _stream is not None:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 FACTORY = Path(__file__).resolve().parents[1]
-CONFIG = json.loads((FACTORY / "config.json").read_text())
+CONFIG = json.loads((FACTORY / "config.json").read_text(encoding="utf-8"))
 TITLE = b"<title>Software Factory</title>"
 
 

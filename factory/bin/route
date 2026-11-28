@@ -21,8 +21,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows gives pipes its ANSI code page (cp1252), which can't hold most of
+# Unicode; issue text, agent output and check logs can. Speak UTF-8 instead.
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    if _stream is not None:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 FACTORY = Path(__file__).resolve().parents[1]
-CONFIG = json.loads((FACTORY / "config.json").read_text())
+CONFIG = json.loads((FACTORY / "config.json").read_text(encoding="utf-8"))
 
 
 def die(msg):
@@ -36,10 +42,10 @@ def main(argv):
     job_id = argv[0]
     job_bin = str(FACTORY / "bin" / "job")
     # Through this Python: Windows can't run a script by its #! line.
-    res = subprocess.run([sys.executable, job_bin, "sync", job_id], capture_output=True, text=True)
+    res = subprocess.run([sys.executable, job_bin, "sync", job_id], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         die(res.stderr.strip())
-    job = json.loads((FACTORY / "jobs" / job_id / "job.json").read_text())
+    job = json.loads((FACTORY / "jobs" / job_id / "job.json").read_text(encoding="utf-8"))
     intake = job["intake"] or die(f"{job_id} has no intake.md")
     risk = CONFIG["routing"].get(intake["risk"]) or die(
         f"risk {intake['risk']!r} isn't in config.json routing ({', '.join(CONFIG['routing'])})")
@@ -50,7 +56,7 @@ def main(argv):
             die(f"surface {surface!r} isn't in config.json surface_reviewers ({', '.join(CONFIG['surface_reviewers'])})")
         reviewers.update(extra)
     agents = {"reviewers": reviewers}
-    res = subprocess.run([sys.executable, job_bin, "agents", job_id, json.dumps(agents)], capture_output=True, text=True)
+    res = subprocess.run([sys.executable, job_bin, "agents", job_id, json.dumps(agents)], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         die(res.stderr.strip())
     print(f"{job_id}: reviewers " + ", ".join(f"{k} {v}" for k, v in reviewers.items()))

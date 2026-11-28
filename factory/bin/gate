@@ -30,9 +30,15 @@ import sys
 import time
 from pathlib import Path
 
+# Windows gives pipes its ANSI code page (cp1252), which can't hold most of
+# Unicode; issue text, agent output and check logs can. Speak UTF-8 instead.
+for _stream in (sys.stdin, sys.stdout, sys.stderr):
+    if _stream is not None:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parents[2]
 FACTORY = ROOT / "factory"
-CONFIG = json.loads((FACTORY / "config.json").read_text())
+CONFIG = json.loads((FACTORY / "config.json").read_text(encoding="utf-8"))
 TAIL = 80
 
 sys.path.insert(0, str(FACTORY / "lib"))
@@ -46,7 +52,7 @@ def die(msg):
 
 
 def git(worktree, *args):
-    res = subprocess.run(["git", *args], cwd=worktree, capture_output=True, text=True)
+    res = subprocess.run(["git", *args], cwd=worktree, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         die(f"`git {' '.join(args)}` failed: {res.stderr.strip()}")
     return res.stdout
@@ -56,7 +62,7 @@ def load_job(job_id):
     path = FACTORY / "jobs" / job_id / "job.json"
     if not path.exists():
         die(f"no job {job_id}")
-    job = json.loads(path.read_text())
+    job = json.loads(path.read_text(encoding="utf-8"))
     try:
         repo = workspace.Workspace(CONFIG, ROOT).for_job(job)
     except workspace.WorkspaceError as e:
@@ -84,13 +90,13 @@ def run_checks(worktree, repo):
     if not repo.checks.exists():
         die(f"no checks script for {repo.name}: {repo.checks}")
     # Read it ourselves so Windows CRLF line endings can't break bash.
-    script = repo.checks.read_text().replace("\r\n", "\n")
+    script = repo.checks.read_text(encoding="utf-8").replace("\r\n", "\n")
     start = time.monotonic()
     try:
         bash = shell.find_bash(CONFIG)  # Git Bash on Windows, never WSL's System32 bash
     except shell.ShellError as e:
         die(str(e))
-    res = subprocess.run([bash, "-c", script, str(repo.checks)], cwd=worktree, capture_output=True, text=True)
+    res = subprocess.run([bash, "-c", script, str(repo.checks)], cwd=worktree, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return res.returncode, res.stdout + res.stderr, int(time.monotonic() - start)
 
 
@@ -111,7 +117,7 @@ def gate(job_id, mode):
         sys.exit(0 if verdict == "PASS" else 1)
     round_dir = FACTORY / "jobs" / job_id / f"round-{job['round']}"
     name = "merge-checks" if mode == "merge" else "checks"
-    (round_dir / f"{name}.log").write_text(log)
+    (round_dir / f"{name}.log").write_text(log, encoding="utf-8")
     tail = "\n".join(log.rstrip().splitlines()[-TAIL:])
     summary = [
         f"{repo.checks.name} {'passed' if code == 0 else f'failed with exit {code}'} in {seconds}s",
@@ -123,8 +129,8 @@ def gate(job_id, mode):
         "## Summary\n" + "\n".join(f"- {s}" for s in summary) + "\n\n"
         "## Protected paths\n"
         + ("\n".join(f"- {p}" for p in protected) if protected else "None changed.")
-        + f"\n\n## {repo.checks.name}\nExit {code} in {seconds}s. Last {TAIL} lines of {name}.log:\n\n```\n{tail}\n```\n"
-    )
+        + f"\n\n## {repo.checks.name}\nExit {code} in {seconds}s. Last {TAIL} lines of {name}.log:\n\n```\n{tail}\n```\n",
+        encoding="utf-8")
     print(f"GATE: {verdict} ({job_id} round {job['round']}, {detail})")
     sys.exit(0 if verdict == "PASS" else 1)
 
@@ -133,7 +139,7 @@ def hook():
     event = json.load(sys.stdin)
     if event.get("stop_hook_active"):
         sys.exit(0)  # one nudge per stop; the gate decides
-    with open(Path(event["agent_transcript_path"]).expanduser()) as f:
+    with open(Path(event["agent_transcript_path"]).expanduser(), encoding="utf-8") as f:
         content = json.loads(f.readline())["message"]["content"]
     prompt = content if isinstance(content, str) else " ".join(b.get("text", "") for b in content)
     job_id = prompt.split("Job: ", 1)[1].split(".", 1)[0]

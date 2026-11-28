@@ -54,7 +54,7 @@ class GitHub:
     def _gh(self, *args):
         if self.slug and args[0] == "issue":
             args = (*args, "--repo", self.slug)
-        res = subprocess.run(["gh", *args], cwd=self.repo, capture_output=True, text=True)
+        res = subprocess.run(["gh", *args], cwd=self.repo, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if res.returncode != 0:
             raise TrackerError(f"`gh {' '.join(args)}` failed: {(res.stderr or res.stdout).strip()}")
         return res.stdout

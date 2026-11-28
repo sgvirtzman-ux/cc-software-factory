@@ -59,7 +59,7 @@ def find_bash(config, platform=None, environ=None, which=None, git_exec_path=Non
 
 def _git_exec_path():
     try:
-        res = subprocess.run(["git", "--exec-path"], capture_output=True, text=True)
+        res = subprocess.run(["git", "--exec-path"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     except OSError:
         return None
     return res.stdout.strip() if res.returncode == 0 else None
@@ -68,7 +68,7 @@ def _git_exec_path():
 def describe(bash):
     """`uname -s` from that bash: MINGW64_NT-... for Git Bash, Linux under WSL."""
     try:
-        res = subprocess.run([bash, "-c", "uname -s"], capture_output=True, text=True, timeout=30)
+        res = subprocess.run([bash, "-c", "uname -s"], capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired) as e:
         raise ShellError(f"can't run {bash}: {e}")
     return res.stdout.strip()
