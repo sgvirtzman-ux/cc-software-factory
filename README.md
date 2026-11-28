@@ -102,6 +102,7 @@ factory/
   lib/shell.py                which bash runs the checks (Git Bash on Windows, never WSL)
   dashboard.html              the board
 examples/jobs/                finished jobs from a real run
+tests/                        end-to-end suites against fake Jira, gh and git hosts (python3 tests/run_all.py)
 INSTALL.md                    instructions for the installing agent
 DESIGN.md                     how it works and why
 ```

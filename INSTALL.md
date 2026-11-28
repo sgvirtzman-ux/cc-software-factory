@@ -111,8 +111,8 @@ done
 chmod +x factory/checks.sh factory/bin/job factory/bin/gate factory/bin/route factory/bin/dashboard
 ```
 
-Don't copy `README.md`, `DESIGN.md`, `INSTALL.md`, `LICENSE`, `examples/` or
-`docs/`. They describe the reference, not the user's project.
+Don't copy `README.md`, `DESIGN.md`, `INSTALL.md`, `LICENSE`, `examples/`,
+`tests/` or `docs/`. They describe the reference, not the user's project.
 
 ## 2. Adapt
 
