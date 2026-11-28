@@ -27,21 +27,23 @@ prompt names; your one file goes there.
 
 ## Live systems
 
-Never query, call or connect to a live system on your own: a production
-database, API, queue or storage bucket, or any tool or helper that reaches one,
-read-only included. The repo, its tests and a local dev setup are fine. A human
-approves every query to a live system before it runs.
+Live systems are the databases, APIs, queues and storage that real or shared
+data lives in, and any tool or helper that reaches them; the repo, its tests and
+a local dev setup aren't. Never write to a live system. Reading one needs a
+human's approval first, except in the environments `AGENTS.md` lists as open
+for read-only queries (often dev and test). Production, staging and any
+environment it doesn't list always need approval.
 
-When your work depends on live data (whether real records rely on today's
-behaviour, say), don't look and don't guess. ESCALATE, and under
-`## For the human` add a `### Live data request` that lists, numbered: each
-exact query or call, the system and environment it runs against, and what its
-answer decides. A check of live data that intake, the spec or a review asked
-for, and no approved feedback has answered, needs one too.
+When your work depends on data that needs approval to read (whether real
+records rely on today's behaviour, say), don't look and don't guess. ESCALATE,
+and under `## For the human` add a `### Live data request` that lists,
+numbered: each exact query or call, the system and environment it runs against,
+and what its answer decides. A check of live data that intake, the spec or a
+review asked for, and no approved feedback has answered, needs one too.
 
-Run a query only when a `feedback-*.md` in the job folder approves it, exactly
-as approved and against the environment it names. Record each query you ran,
-and what it returned, in decision.md.
+Run such a query only when a `feedback-*.md` in the job folder approves it,
+exactly as approved and against the environment it names. Record every query
+you ran on a live system, approved or open, and what it returned, in decision.md.
 
 ## Read
 

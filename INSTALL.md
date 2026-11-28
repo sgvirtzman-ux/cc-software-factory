@@ -259,12 +259,18 @@ if neither exists). Every agent reads it. Make sure it says:
 - how to set up a fresh checkout (install dependencies, env files to copy);
 - how to start the dev server on a given port, if the project has one;
 - the validation commands, matching `factory/checks.sh`;
-- the live systems (production databases, APIs, queues, storage) and any
-  tool or helper that reaches them. Agents never query one without the user's
-  approval; this tells them what counts. For each such tool, also add an `ask`
-  permission rule to `.claude/settings.json`, so Claude Code asks the user
-  before every call, even one an agent makes against its instructions:
-  `{"permissions": {"ask": ["Bash(<the tool's command>:*)"]}}`. Ask the user
+- the live systems (databases, APIs, queues and storage with real or shared
+  data) and any tool or helper that reaches them, and which environments are
+  open for read-only queries without asking (often dev and test). Agents never
+  write to a live system, and read one only with the user's approval, except
+  read-only in an open environment; production, staging and any environment
+  not listed always need approval. Ask the user which environments are open;
+  if they name none, none are. For each tool that reaches an environment that
+  needs approval, also add an `ask` permission rule to `.claude/settings.json`,
+  so Claude Code asks the user before every call, even one an agent makes
+  against its instructions: `{"permissions": {"ask": ["Bash(<the tool's
+  command>:*)"]}}`. When the command names its environment, match only the
+  environments that need approval, so open ones don't prompt. Ask the user
   which tools those are; don't guess.
 
 Then add a short section:
