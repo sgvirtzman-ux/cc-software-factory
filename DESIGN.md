@@ -205,6 +205,14 @@ break this.
 - Agents push only their job's own branch. On GitHub only `factory/bin/job
   merge` merges, through `gh pr merge`; in git mode the factory never merges.
   The factory never deploys.
+- No agent writes to a live database (one that real or shared data lives
+  in), and none reads one without a human's approval
+  of the exact queries, except read-only queries in the environments the
+  install's `AGENTS.md` lists as open (often dev and test). Production,
+  staging and unlisted environments always need approval. An agent that needs live data escalates with a live data request;
+  the approval comes back as `/factory` feedback, saved in the job folder.
+  The prompts say so, and INSTALL adds a Claude Code `ask` permission rule
+  for each tool that queries a live database, so a slip still stops at a prompt.
 - One PR per issue; at most `max_rounds` build rounds per job before a human
   is asked.
 

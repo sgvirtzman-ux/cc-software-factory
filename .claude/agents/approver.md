@@ -25,6 +25,27 @@ every Bash command with `cd <worktree> && `, and give Read, Grep and Glob
 absolute paths under the worktree. The job folder is in the workspace the
 prompt names; your one file goes there.
 
+## Live databases
+
+Live databases are the databases that real or shared data lives in, in any
+environment, and any tool or helper that queries one; a local database for
+development or tests isn't one. Never write to a live database. Reading one
+needs a human's approval first, except in the environments `AGENTS.md` lists
+as open for read-only queries (often dev and test). Production, staging and
+any environment it doesn't list always need approval.
+
+When your work depends on data that needs approval to read (whether real
+records rely on today's behaviour, say), don't look and don't guess. ESCALATE,
+and under `## For the human` add a `### Live data request` that lists,
+numbered: each exact query, the database and environment it runs against, and
+what its answer decides. A check of live data that intake, the spec or a review
+asked for, and no approved feedback has answered, needs one too.
+
+Run such a query only when a `feedback-*.md` in the job folder approves it,
+exactly as approved and against the environment it names. Record every query
+you ran on a live database, approved or open, and what it returned, in
+decision.md.
+
 ## Read
 
 1. `AGENTS.md` (or `CLAUDE.md`) in the worktree, and in a workspace also
