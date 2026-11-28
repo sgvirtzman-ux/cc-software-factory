@@ -104,9 +104,11 @@ the repos listed in `config.json`. Each job still builds in exactly one repo:
 intake chooses it, because it already reads the code to judge scope, and a
 `factory:<repo>` label overrides it when a person knows better. The choice is
 a `REPO:` line in `intake.md`, checked against the list before anything is
-created. Worktrees go in the workspace's `.worktrees/<repo>/`, outside the
-repos, so the factory never writes to a repo except through its own
-job branches. Each repo's checks script lives in the workspace too, so
+created. Worktrees go in the workspace's `.worktrees/<repo>/<job-number>`,
+outside the repos, so the factory never writes to a repo except through its
+own job branches. They're named after the job's number (`003`) rather than its
+full id, because a workspace path is already deep and a long title's slug can
+push a repo's build output past Windows' 260-character path limit. Each repo's checks script lives in the workspace too, so
 no branch can edit the checks it's judged by. The agents are told their
 worktree, repo and base in every prompt's header, which `job header` prints,
 so they work the same in either layout. One repo per job keeps state, the gate
