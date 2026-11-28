@@ -259,10 +259,10 @@ if neither exists). Every agent reads it. Make sure it says:
 - how to set up a fresh checkout (install dependencies, env files to copy);
 - how to start the dev server on a given port, if the project has one;
 - the validation commands, matching `factory/checks.sh`;
-- the live systems (databases, APIs, queues and storage with real or shared
-  data) and any tool or helper that reaches them, and which environments are
-  open for read-only queries without asking (often dev and test). Agents never
-  write to a live system, and read one only with the user's approval, except
+- the live databases (those with real or shared data) and any tool or helper
+  that queries them, and which environments are open for read-only queries
+  without asking (often dev and test). Agents never write to a live database,
+  and read one only with the user's approval, except
   read-only in an open environment; production, staging and any environment
   not listed always need approval. Ask the user which environments are open;
   if they name none, none are. For each tool that reaches an environment that

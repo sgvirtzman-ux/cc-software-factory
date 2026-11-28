@@ -301,10 +301,10 @@ new feature, ask.
   only through `factory/bin/job merge`, which uses `gh pr merge`. In git mode
   the factory never merges: the team does, through their own PR. The factory
   never deploys.
-- No agent writes to a live system (a database, API, queue or storage that
-  real or shared data lives in, or any tool that reaches one), and none reads
-  one without the user's explicit approval, except read-only queries in the
-  environments `AGENTS.md` lists as open (often dev and test). Production,
+- No agent writes to a live database (one that real or shared data lives in,
+  or any tool that queries one), and none reads one without the user's
+  explicit approval, except read-only queries in the environments `AGENTS.md`
+  lists as open (often dev and test). Production,
   staging and unlisted environments always need it, and the same holds for
   you. Agents ask by escalating with a live data request; the user approves with `/factory` feedback, which
   `job feedback` saves as `feedback-<k>.md`, the record of what was approved.
