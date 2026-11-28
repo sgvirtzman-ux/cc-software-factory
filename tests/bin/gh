@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+import json, os, sys
+state_path, log_path = os.environ["FAKE_GH_STATE"], os.environ["FAKE_GH_LOG"]
+S = json.load(open(state_path))
+args = sys.argv[1:]
+with open(log_path, "a") as f:
+    f.write(json.dumps(args) + "\n")
+def save(): json.dump(S, open(state_path, "w"))
+def flag(name):
+    return args[args.index(name) + 1] if name in args else None
+if args[:2] == ["api", "user"]:
+    print("operator"); sys.exit(0)
+if args[:2] == ["issue", "view"]:
+    i = S["issues"][args[2]]
+    print(json.dumps({"number": int(args[2]), "title": i["title"], "body": i["body"], "author": {"login": i["author"]},
+                      "labels": [{"name": l} for l in i["labels"]], "state": i["state"],
+                      "url": f"https://github.com/o/r/issues/{args[2]}", "comments": i["comments"]})); sys.exit(0)
+if args[:2] == ["issue", "list"]:
+    label = flag("--label")
+    print(json.dumps([{"number": int(n), "title": i["title"]} for n, i in S["issues"].items()
+                      if label in i["labels"] and i["state"] == "OPEN"])); sys.exit(0)
+if args[:2] == ["issue", "comment"]:
+    i = S["issues"][args[2]]
+    i["comments"].append({"author": {"login": "operator"}, "body": flag("--body"), "createdAt": f"2026-11-27T00:00:{len(i['comments']):02d}Z"})
+    save(); sys.exit(0)
+if args[:2] == ["issue", "edit"]:
+    i = S["issues"][args[2]]
+    if flag("--add-label"): i["labels"].append(flag("--add-label"))
+    if flag("--remove-label"):
+        for l in flag("--remove-label").split(","):
+            if l in i["labels"]: i["labels"].remove(l)
+    save(); sys.exit(0)
+if args[:2] == ["issue", "create"]:
+    n = str(max(int(k) for k in S["issues"]) + 1)
+    S["issues"][n] = {"title": flag("--title"), "body": flag("--body"), "author": "operator", "labels": [flag("--label")], "state": "OPEN", "comments": []}
+    save(); print(f"https://github.com/o/r/issues/{n}"); sys.exit(0)
+PRS = S.setdefault("prs", {})
+if args[:2] == ["pr", "list"]:
+    head = flag("--head")
+    print(json.dumps([{"number": int(n), "url": pr["url"]} for n, pr in PRS.items()
+                      if pr["head"] == head and pr["state"] == "OPEN"])); sys.exit(0)
+if args[:2] == ["pr", "create"]:
+    n = str(100 + len(PRS))
+    PRS[n] = {"head": flag("--head"), "base": flag("--base"), "title": flag("--title"), "body": flag("--body"),
+              "draft": "--draft" in args, "state": "OPEN", "comments": [], "url": f"https://github.com/o/r/pull/{n}"}
+    save(); print("Creating pull request...\n" + PRS[n]["url"]); sys.exit(0)
+if args[:2] == ["pr", "view"]:
+    pr = PRS[args[2]]
+    fields = flag("--json").split(",")
+    out = {"state": pr["state"], "isDraft": pr["draft"]}
+    print(json.dumps({k: out[k] for k in fields})); sys.exit(0)
+if args[:2] == ["pr", "ready"]:
+    PRS[args[2]]["draft"] = False; save(); sys.exit(0)
+if args[:2] == ["pr", "comment"]:
+    PRS[args[2]]["comments"].append(flag("--body")); save(); sys.exit(0)
+if args[:2] == ["pr", "merge"]:
+    pr = PRS[args[2]]
+    if pr["draft"]: print("draft PR can't merge", file=sys.stderr); sys.exit(1)
+    pr["state"] = "MERGED"; pr["method"] = args[3]; save(); sys.exit(0)
+if args[:2] == ["pr", "close"]:
+    PRS[args[2]]["state"] = "CLOSED"; save(); sys.exit(0)
+if args[:2] == ["repo", "view"]:
+    print("o/r"); sys.exit(0)
+print(f"fake gh: unhandled {args}", file=sys.stderr); sys.exit(1)
